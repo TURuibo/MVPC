@@ -1,12 +1,12 @@
 library(pcalg)
 library(Rfast)
 
-load_sim_data <- function(p,n,mode=gen_mar,seed=1000){
+gen_data <- function(p,n,mode='mar',seed=1000){
   # p: number of variables 
   # n: data sample size
   # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
   # **************
-  # return: 
+  # Return: 
   # data_complete: the complete data set
   # data_m: the data set containing missing values that generated with mode function
   # data_ref: the MCAR data set as reference 
@@ -21,8 +21,9 @@ load_sim_data <- function(p,n,mode=gen_mar,seed=1000){
   data_complete <- rmvnorm(n, mu=rep(0,p), sigma=trueCov(myDAG))
   
   # Make sure the collider is the cause of R-variable of its parent variable
-  data_del <-mode(data_complete,myDAG)
+  data_del <-del(data_complete,myDAG,mode)
   data_m = data_del$data_mar
+  
   # Also provide reference, a MCAR data set and the ground-truth (DAG, missingness indicator, and parents of the missingness indicators ).
   data_ref <- data.frame(data_del$data_ref)
   ground_truth <- list(
@@ -38,21 +39,31 @@ load_sim_data <- function(p,n,mode=gen_mar,seed=1000){
               ground_truth=ground_truth))
 }
 
-gen_mar <- function(data, myDAG, num_m=6){
+del <- function(data, myDAG,mode='mar',num_m=6){
   # Constraint of MAR:
   # 1. the missingness indicator is caused by some substantive variables;
   # 2. the parents of missingness indicator have no missing values in the data set.
   # Constraint of our implememntation:
   # Here we only choose a single parent for a missingness indicator.
+  # ********************
+  # Constraints of MNAR:
+  # 1. no self-masking: X -> Rx
+  # 2. parents of missingness indicators must also have missing values in the data set.
+  # 3. the limitation of the correction method 
+  # ********************
   
   size <- dim(data)
   num_var <- size[2]
   num_samples <- size[1]
   # 1. Choose the missingness indicators/ choose which variables contain missing values 
-  m_ind = select_missingness_var(num_var,num_m)
+  m_ind = select_m_ind(num_var,num_m)
   
   # 2. Choose the cause of missingess indicators
-  prt_m = select_parent_var(m_ind,num_var)
+  if(mode=="mar"){
+    prt_m = select_prt_mar_ind(m_ind,num_var)
+  }else{
+    prt_m = select_prt_mnar_ind(m_ind,num_var)
+  }
   
   # 3. Generate missing values according the the values of missingness indicators
   data_mar_ref = generate_missing_values(data,m_ind,prt_m)
@@ -62,19 +73,32 @@ gen_mar <- function(data, myDAG, num_m=6){
   return(list(data_mar=data_mar,
               data_ref=data_ref,
               parent_m_ind=prt_m,
-              m_ind=m_ind
-              )) 
+              m_ind=m_ind)) 
 }
 
-select_missingness_var<-function(num_var,num_m){
+select_m_ind<-function(num_var,num_m){
   return(sample(x=1:num_var,size=num_m,replace=FALSE))
 }
 
-select_parent_var<-function(m_ind,num_var){
+select_prt_mar_ind<-function(m_ind,num_var){
   return(sample(x=setdiff(1:num_var,m_ind),size=length(m_ind),replace=TRUE))
 }
 
+select_prt_mnar_ind<-function(m_ind,num_var){
+  # No self-masking
+  # only the variable contains missing values can be the parents of missingness indicators
+  prts = c()
+  for(i in m_ind){
+    newelem<-sample(setdiff(m_ind,i),size=1)
+    prts <- c(prts, newelem) 
+  }
+  return(prts)
+}
+
 generate_missing_values<-function(data,m_ind,parent_m_ind){
+  # Give the parents of missingness indicators, and the missingness indcators
+  # The missing values are generated whn the parent values are in the bottom XX percentage.
+  
   data_mar=data
   data_mcar=data
   for(i in c(1:length(m_ind))){
@@ -88,4 +112,4 @@ generate_missing_values<-function(data,m_ind,parent_m_ind){
   return(list(data_mar=data_mar,data_ref=data_mcar))
 }
 
-load_sim_data(20,10)
+gen_data(20,10,"mnar")
