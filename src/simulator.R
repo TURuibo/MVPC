@@ -1,6 +1,7 @@
 library(pcalg)
 library(Rfast)
-load_sim_data <- function(p,n,mode=gen_mar){
+
+load_sim_data <- function(p,n,mode=gen_mar,seed=1000){
   # p: number of variables 
   # n: data sample size
   # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
@@ -16,14 +17,14 @@ load_sim_data <- function(p,n,mode=gen_mar){
   # while(!check_collider(myDAG)){
   #   myDAG <- randomDAG(p,2/(p-1))
   # }
-  set.seed(1000)
+  set.seed(seed)
   data_complete <- rmvnorm(n, mu=rep(0,p), sigma=trueCov(myDAG))
   
   # Make sure the collider is the cause of R-variable of its parent variable
   data_del <-mode(data_complete,myDAG)
-  data_m = data_del$data
+  data_m = data_del$data_mar
   # Also provide reference, a MCAR data set and the ground-truth (DAG, missingness indicator, and parents of the missingness indicators ).
-  data_ref <- data.frame(data_del$data_mcar)
+  data_ref <- data.frame(data_del$data_ref)
   ground_truth <- list(
     dag=myDAG,
     cpdag=dag2cpdag(myDAG),
@@ -37,78 +38,54 @@ load_sim_data <- function(p,n,mode=gen_mar){
               ground_truth=ground_truth))
 }
 
-gen_mar <- function(data, myDAG){
-  return(list(data=NULL,
-              data_ref=NULL,
-              parent_m_ind=NULL,
-              m_ind=NULL
+gen_mar <- function(data, myDAG, num_m=6){
+  # Constraint of MAR:
+  # 1. the missingness indicator is caused by some substantive variables;
+  # 2. the parents of missingness indicator have no missing values in the data set.
+  # Constraint of our implememntation:
+  # Here we only choose a single parent for a missingness indicator.
+  
+  size <- dim(data)
+  num_var <- size[2]
+  num_samples <- size[1]
+  # 1. Choose the missingness indicators/ choose which variables contain missing values 
+  m_ind = select_missingness_var(num_var,num_m)
+  
+  # 2. Choose the cause of missingess indicators
+  prt_m = select_parent_var(m_ind,num_var)
+  
+  # 3. Generate missing values according the the values of missingness indicators
+  data_mar_ref = generate_missing_values(data,m_ind,prt_m)
+  data_mar = data_mar_ref$data_mar
+  data_ref = data_mar_ref$data_ref
+  
+  return(list(data_mar=data_mar,
+              data_ref=data_ref,
+              parent_m_ind=prt_m,
+              m_ind=m_ind
               )) 
 }
 
-load_sim_data(20,10)
+select_missingness_var<-function(num_var,num_m){
+  return(sample(x=1:num_var,size=num_m,replace=FALSE))
+}
 
-# gen_mar <- function(data, myDAG){
-#   num_m<-sample(6:10,1)
-#   size <- dim(data)
-#   num_var <- size[2]
-#   num_samples <- size[1]
-#   m_ind <- sample(c(1:num_var))
-#   colliders <- find_colliders(myDAG)
-#   if(length(colliders)>num_m){
-#     colliders <- colliders[1:num_m]
-#   }
-#   not_colliders <- setdiff(c(1:num_var),colliders)
-#   
-#   sup_ind<-rep(0,1)
-#   mar_ind<-rep(0,1)
-#   count = 1 
-#   i=1
-#   sep<-ceiling(length(colliders)/2)
-#   
-#   for(cldr in colliders){
-#     if(i <= sep){prts <- find_parents(cldr, myDAG)}
-#     else{
-#       prts <- c(1:num_var)
-#     }
-#     i=i+1
-#     prts<-setdiff(prts,mar_ind)
-#     prts<-setdiff(prts,colliders)
-#     if(length(prts)>0){
-#       mar_ind[count] <- prts[1]
-#       sup_ind[count] <- cldr
-#       count<-count+1
-#     }
-#     else{
-#       next
-#     }
-#   }
-#   # what left
-#   if(length(sup_ind)>=num_m){
-#     sup_ind<-sup_ind[1:num_m]
-#     mar_ind<-mar_ind[1:num_m]
-#   }
-#   else{
-#     x = c(1:num_var)
-#     x<-setdiff(x,mar_ind)
-#     x<-setdiff(x,sup_ind)
-#     if(length(x)>0){
-#       x<-sample(x)
-#       sup_ind[count:num_m] <- x[1:(num_m-count+1)]
-#       mar_ind[count:num_m] <- x[(num_m-count+1+1):(2*(num_m-count+1))]
-#     }
-#   }
-#   
-#   data_mcar<-data
-#   for(i in c(1:num_m)){
-#     r_bottom <- runif(1, min = 0.1, max = 0.5)
-#     r <- data[,sup_ind[i]] < qnorm(r_bottom)
-#     
-#     data[r==1, mar_ind[i]] = NA
-#     r_mcar<-sample(r)
-#     data_mcar[r_mcar==1, mar_ind[i]] = NA
-#   }
-#   return(list(data=data,
-#               data_mcar=data_mcar,
-#               parent_m_ind=sup_ind,
-#               m_ind=mar_ind))
-# }
+select_parent_var<-function(m_ind,num_var){
+  return(sample(x=setdiff(1:num_var,m_ind),size=length(m_ind),replace=TRUE))
+}
+
+generate_missing_values<-function(data,m_ind,parent_m_ind){
+  data_mar=data
+  data_mcar=data
+  for(i in c(1:length(m_ind))){
+    # Choose lower "bottom_p" percentage of the values
+    bottom_p <- runif(1, min = 0.1, max = 0.5)
+    r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
+    data_mar[r==1, m_ind[i]] = NA
+    r_mcar<-sample(r)
+    data_mcar[r_mcar==1, m_ind[i]] = NA
+  }
+  return(list(data_mar=data_mar,data_ref=data_mcar))
+}
+
+load_sim_data(20,10)
