@@ -116,7 +116,38 @@ generate_missing_values<-function(data,m_ind,parent_m_ind){
 # Example of generating synthetic data
 # gen_data(20,10,"mnar")
 
-#******************Functions of extracting necessary information for MVPC******************
+#****************** Independence test ****************** 
+gaussCItest_tw_del <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  z <- zStat(x,y,S, 
+             C = cor(data), n = length(data[,1]))
+  2*pnorm(abs(z), lower.tail = FALSE)
+}
+
+test_wise_deletion <-function(var_ind, data){
+  ## Delete the rows of given variables (var_ind) if there is a missing value in a row
+  ## var_ind: variables in the current conditonal independence test
+  ## data: the whole data set 
+  ##--------------------------------
+  ## Return: the deleted dataset of the variables in the CI test 
+  
+  not_del_ind = c(rep(TRUE,length(data[,1])))
+  for (var in 1:length(var_ind)){
+    if(anyNA(data[,var])){
+      not_del_ind = not_del_ind & !is.na(data[,var])
+    }
+  }  
+  return(data[not_del_ind,])
+}
+
+#****************** Functions of extracting necessary information for MVPC ******************
 get_m_ind <- function(data){
   ## Check whether the current testing variables containing missing variables 
   ## Value: return TRUE or FALSE
@@ -156,7 +187,6 @@ get_prt_m_ind<-function(R,data,alpha=0.01,mode=Anovatest){
   prt_m[['sup']]<-sup
   return(prt_m)
 }
-
 
 skeleton3 <- function(suffStat,alpha=0.05, R_ind,labels,
                       m_method=deletion,
@@ -332,7 +362,6 @@ skeleton3 <- function(suffStat,alpha=0.05, R_ind,labels,
   x<-c(1:length(suffStat$data[1,]))
   x[sup]
 }## end{ skeleton3}
-
 
 Anovatest <- function(x,y,S,suffStat,method=deletion) {
   ## Conditional independence test (ANOVA) between continuous variables with deletion methods
