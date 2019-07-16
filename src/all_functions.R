@@ -124,6 +124,7 @@ detect_colliders<-function(myDAG){
   x <- c(1:num_vars)
   x[ind]
 }
+
 # Example of generating synthetic data
 # gen_data(20,10,"mnar")
 
@@ -150,13 +151,17 @@ test_wise_deletion <-function(var_ind, data){
   ## Return: the deleted dataset of the variables in the CI test 
   
   not_del_ind = c(rep(TRUE,length(data[,1])))
-  for (var in 1:length(var_ind)){
+  for (var in var_ind){
     if(anyNA(data[,var])){
       not_del_ind = not_del_ind & !is.na(data[,var])
     }
   }  
   return(data[not_del_ind,])
 }
+
+PermCCItest <- function(x, y, S, suffStat){}
+
+DRWCItest <- function(x, y, S, suffStat){}
 
 #****************** Functions of extracting necessary information for MVPC ******************
 get_m_ind <- function(data){
@@ -173,14 +178,14 @@ get_m_ind <- function(data){
   return(m_ind)
 }
 
-get_prt_m_ind<-function(R,data,alpha=0.01,mode=Anovatest){
+get_prt_m_ind<-function(data, alpha=0.01, mode=Anovatest){
   ## Detect causes of the missingness indicators
   ## R: 
   ## data:
   ## mode: Anova test to test the conditional independence
   ## ---------------------------
   ## Return: the index of parents of missingness indicators
-
+  R<-get_m_ind(data_m)
   m=c()
   prt=list()
   suffStat = list(data=data)
@@ -197,244 +202,4 @@ get_prt_m_ind<-function(R,data,alpha=0.01,mode=Anovatest){
   prt_m<-data.frame(m=m)
   prt_m[['sup']]<-sup
   return(prt_m)
-}
-
-skeleton3 <- function(suffStat,alpha=0.05, R_ind,labels,
-                      m_method=deletion,
-                      indepTest=Anovatest,
-                      method = c("stable", "original", "stable.fast"), m.max = Inf,
-                      fixedGaps = NULL, fixedEdges = NULL,
-                      NAdelete = TRUE, numCores = 1, verbose = FALSE,debug=FALSE)
-{
-  ## Assumption : 1. R varaible can only be the child rather than parent variable
-  ##            : 2. R only has one cause at most.
-  ## Purpose: Find the variables that are connected to a certain R varaible
-  ## estimate skeleton of DAG given data
-  ## ----------------------------------------------------------------------
-  ## Arguments:
-  ## - suffStat: List containing all necessary elements for the conditional
-  ##             independence decisions in the function "indepTest".
-  ## - indepTest: predefined function for testing conditional independence
-  ## - alpha: Significance level of individual partial correlation tests
-  ## ----------------------------------------------------------------------
-  ## Return: index of the support variables (the cause of the missingness indicator)
-  
-  r <- is.na(suffStat$data[,R_ind])
-  suffStat$data[,R_ind]<-rep(0,length(suffStat$data[,R_ind]))
-  suffStat$data[r,R_ind]<-1
-  suffStat$C = cor(suffStat$data)
-  m_var<-get_m_ind(suffStat$data)
-  p<-length(suffStat$data[1,])
-  
-  cl <- match.call()
-  if(!missing(p)) stopifnot(is.numeric(p), length(p <- as.integer(p)) == 1, p >= 2)
-  if(missing(labels)) {
-    labels <- as.character(seq_len(p))
-  } else { ## use labels ==> p  from it
-    stopifnot(is.character(labels))
-    if(missing(p))
-      p <- length(labels)
-    else if(p != length(labels))
-      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
-    ## Don't want message, in case this is called e.g. from fciPlus():
-    ## else
-    ##   message("No need to specify 'p', when 'labels' is given")
-  }
-  seq_p <- seq_len(p)
-  method <- match.arg(method)
-  ## C++ version still has problems under Windows; will have to check why
-  ##  if (method == "stable.fast" && .Platform$OS.type == "windows") {
-  ##    method <- "stable"
-  ##    warning("Method 'stable.fast' is not available under Windows; using 'stable' instead.")
-  ##  }
-  
-  ## G := !fixedGaps, i.e. G[i,j] is true  iff  i--j  will be investigated
-  if (is.null(fixedGaps)) {
-    ##
-    G <- matrix(TRUE, nrow = p, ncol = p)
-    ##
-  }
-  else if (!identical(dim(fixedGaps), c(p, p)))
-    stop("Dimensions of the dataset and fixedGaps do not agree.")
-  else if (!identical(fixedGaps, t(fixedGaps)) )
-    stop("fixedGaps must be symmetric")
-  else
-    G <- !fixedGaps
-  ## Make sure G is a symetric matrix
-  G[,R_ind]<-TRUE
-  G[R_ind,]<-TRUE
-  diag(G) <- FALSE
-  if (any(is.null(fixedEdges))) { ## MM: could be sparse
-    fixedEdges <- matrix(rep(FALSE, p * p), nrow = p, ncol = p)
-  }
-  else if (!identical(dim(fixedEdges), c(p, p)))
-    stop("Dimensions of the dataset and fixedEdges do not agree.")
-  else if (!identical(fixedEdges, t(fixedEdges)) )
-    stop("fixedEdges must be symmetric")
-  
-  ## Check number of cores
-  stopifnot((is.integer(numCores) || is.numeric(numCores)) && numCores > 0)
-  if (numCores > 1 && method != "stable.fast") {
-    warning("Argument numCores ignored: parallelization only available for method = 'stable.fast'")
-  }
-  if (method == "stable.fast") {
-    ## Do calculation in C++...
-    next
-  }
-  else {
-    ## Original R version
-    
-    pval <- NULL
-    sepset <- lapply(seq_p, function(.) vector("list",p))# a list of lists [p x p]
-    ## save maximal p value
-    pMax <- matrix(-Inf, nrow = p, ncol = p)
-    diag(pMax) <- 1
-    done <- FALSE
-    ord <- 0L
-    n.edgetests <- numeric(1)# final length = max { ord}
-    while (!done && any(G) && ord <= m.max) {
-      n.edgetests[ord1 <- ord+1L] <- 0
-      done <- TRUE
-      ind <- which(G, arr.ind = TRUE)
-      ## For comparison with C++ sort according to first row
-      ind <- ind[order(ind[, 1]), ]
-      remEdges <- nrow(ind)
-      if (verbose)
-        cat("Order=", ord, "; remaining edges:", remEdges,"\n",sep = "")
-      if(method == "stable") {
-        ## Order-independent version: Compute the adjacency sets for any vertex
-        ## Then don't update when edges are deleted
-        G.l <- split(G, gl(p,p))
-      }
-      for (i in 1:remEdges) {
-        if(verbose && (verbose >= 2 || i%%100 == 0)) cat("|i=", i, "|iMax=", remEdges, "\n")
-        x <- ind[i, 1]
-        y <- ind[i, 2]
-        if(x!=R_ind){next}  # we only focus on the missingness variable
-        if (G[y, x] && !fixedEdges[y, x]) {
-          nbrsBool <- if(method == "stable") G.l[[x]] else G[,x]
-          nbrsBool[y] <- FALSE
-          nbrs <- seq_p[nbrsBool]
-          length_nbrs <- length(nbrs)
-          if (length_nbrs >= ord) {
-            if (length_nbrs > ord)
-              done <- FALSE
-            S <- seq_len(ord)
-            repeat { ## condition w.r.to all  nbrs[S] of size 'ord'
-              n.edgetests[ord1] <- n.edgetests[ord1] + 1
-              if (identical(indepTest, gaussCItest)){
-                pval <- indepTest(x, y, nbrs[S], suffStat) 
-              }
-              else{
-                pval <- indepTest(x, y, nbrs[S], suffStat,m_method)
-              }
-              if (verbose)
-                cat("x=", x, " y=", y, " S=", nbrs[S], ": pval =", pval, "\n")
-              if(is.na(pval))
-                pval <- as.numeric(NAdelete) ## = if(NAdelete) 1 else 0
-              if (pMax[x, y] < pval)
-                pMax[x, y] <- pval
-              if(identical(indepTest, BICtest)||identical(indepTest, DICtest)){
-                if(pval >= 0) { # independent
-                  G[x, y] <- G[y, x] <- FALSE
-                  sepset[[x]][[y]] <- nbrs[S]
-                  
-                  break
-                }
-                else {
-                  nextSet <- getNextSet(length_nbrs, ord, S)
-                  if (nextSet$wasLast)
-                    break
-                  S <- nextSet$nextSet
-                }
-              }
-              else{
-                if(pval >= alpha) { # independent
-                  G[x, y] <- G[y, x] <- FALSE
-                  sepset[[x]][[y]] <- nbrs[S]
-                  break
-                }
-                else {
-                  nextSet <- getNextSet(length_nbrs, ord, S)
-                  if (nextSet$wasLast)
-                    break
-                  S <- nextSet$nextSet
-                }
-              }
-              
-            } ## repeat
-          }
-        }
-      }# for( i )
-      ord <- ord + 1L
-    } ## while()
-  }
-  sup<-G[R_ind,]
-  x<-c(1:length(suffStat$data[1,]))
-  x[sup]
-}## end{ skeleton3}
-
-Anovatest <- function(x,y,S,suffStat,method=deletion) {
-  ## Conditional independence test (ANOVA) between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$C: correlation matrix
-  ##    suffStat$n: sample size
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  
-  t_var = c(x,y,S)
-  
-  if(check_m_var(x,y,S,suffStat)){data = method(t_var,suffStat)}
-  else{data<-suffStat$data[,c(x,y,S)]}
-  
-  if(length(t_var)>2){
-    xnam <- paste0("data[,", 3:length(t_var),"]")
-    fmla <- as.formula(paste("data[,2] ~ ", paste(xnam, collapse= "+"),"+data[,1]"))
-    data[,1]<-factor(data[,1])
-    if(length(levels(data[,1]))<=1){
-      0
-    }else{
-      result <- aov(fmla,data = data)
-      summary(result)[[1]][length(t_var)-1,5]
-    }
-    
-  }
-  else{
-    fmla <- as.formula(paste("data[,2] ~ data[,1]"))
-    data[,1]<-factor(data[,1])
-    
-    if(length(levels(data[,1]))<=1){
-      1
-    }
-    else if(sum(data[,1]==levels(data[,1])[1])>0.95*length(suffStat$data[,1])
-            |sum(data[,1]==levels(data[,1])[2])>0.95*length(suffStat$data[,1])
-            |sum(data[,1]==levels(data[,1])[1])<0.05*length(suffStat$data[,1])
-            |sum(data[,1]==levels(data[,1])[2])<0.05*length(suffStat$data[,1])
-    ){0}
-    else{
-      if(length(unique(data[,2]))==2){
-        v<-unique(data[,2])
-        data<-as(data,'matrix')
-        data<-apply(data, 2, as.numeric)
-        v<-unique(data[,2])
-        if(sum(data[,2]==v[1])>0.9*length(data[,1])|sum(data[,2]==v[2])>0.9*length(data[,1]) |sum(data[,2]==v[1])<0.1*length(data[,1])|sum(data[,2]==v[2])<0.1*length(data[,1])){
-          0
-        }else{
-          binCItest(1,2,c(), list(dm = data, adaptDF = FALSE))
-        }
-      }else{
-        v<-unique(data[,2])
-        
-        if(sum(data[,2]==v[1])>0.9*length(data[,1])|sum(data[,2]==v[2])>0.9*length(data[,1]) |sum(data[,2]==v[1])<0.1*length(data[,1])|sum(data[,2]==v[2])<0.1*length(data[,1])){
-          0
-        }else{
-          ttest=t.test(fmla,data = data)
-          ttest[['p.value']]
-        }
-      }
-      
-    }
-  }
 }
