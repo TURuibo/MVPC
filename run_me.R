@@ -31,22 +31,46 @@ shd_comp = shd(dag, myCPDAG)
 
 suffStat_ref <- list(data=data_ref)
 suffStat_ref_lw_del<- list(data=test_wise_deletion(1:num_var, data_ref))
-dag <- pc(suffStat_ref_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
-shd_ref = shd(dag, myCPDAG)
+
+dag_lw <- pc(suffStat_ref_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
+shd_ref_lw = shd(dag_lw, myCPDAG)
+
+dag_tw <- pc(suffStat_ref, gaussCItest_tw_del, alpha=0.01, p=num_var)
+shd_ref_tw = shd(dag_tw, myCPDAG)
 
 suffStat_m <- list(data=data_m)
 suffStat_m_lw_del<- list(data=test_wise_deletion(1:num_var, data_m))
-dag <- pc(suffStat_m_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
-shd_m = shd(dag, myCPDAG)
+
+dag_m_lw <- pc(suffStat_m_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
+dag_m_tw <- pc(suffStat_m, gaussCItest_tw_del, alpha=0.01, p=num_var)
+shd_m_lw = shd(dag_m_lw, myCPDAG)
+shd_m_tw = shd(dag_m_tw, myCPDAG)
 
 print(shd_comp)
-print(shd_ref)
-print(shd_m)
+print(shd_ref_lw)
+print(shd_ref_tw)
+print(shd_m_lw)
+print(shd_m_tw)
+
+# ********* Missing Value PC (MVPC) *********
+mvpc<-function(suffStat, indepTest, alpha, labels, p, 
+               fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf, 
+               u2pd = c("relaxed", "rand", "retry"), 
+               skel.method = c("stable", "original", "stable.fast"), 
+               conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
+  # MVPC step1: Test-wise skeleton search.
+  # (to extract the necessary information for correcting the wrong edges in the result and initialize the PC algorithm).
+  
+  
+  # MVPC step2: Detect parents of missingness indicators.
+  sup_var<-get_prt_m_ind(data=suffStat$data) # "data" is "data_m" which containing missing values.
+  
+  # MVPC step3: 
+  # a) Run PC algorithm with the 1st step skeleton; 
+  # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
+  
+}
 
 
-# ********* Missing Value PC (MVPC) ********* 
-# Detecting variables with missing values in the data set
-R<-get_m_ind(data_m)
 
-# Detect the parents of the variables with missing values
-sup_var<-get_prt_m_ind(R, data=data_m)
+
