@@ -107,9 +107,9 @@ generate_missing_values<-function(p,n,myDAG,m_ind,parent_m_ind){
     # Choose lower "bottom_p" percentage of the values
     bottom_p <- runif(1, min = 0.1, max = 0.5)
     r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
-    data_m[r==1, m_ind[i]] = NA
+    data_m[r, m_ind[i]] = NA
     r_mcar<-sample(r)
-    data_mcar[r_mcar==1, m_ind[i]] = NA
+    data_mcar[r_mcar, m_ind[i]] = NA
   }
   return(list(data_complete=data, 
               data_m=data_m,
@@ -178,11 +178,20 @@ get_m_ind <- function(data){
   return(m_ind)
 }
 
-get_prt_m_ind<-function(data, alpha=0.01, mode=Anovatest){
+graph2gaps<-function(graphnet){
+  # graphnet: a graphNet class which is defined in pcalg
+  #
+  # ******************
+  # Return: a gaps matrix which represent the gaps in a DAG or a skeleton of a graph
+  graphnet.matrix <-as(graphnet@graph,"matrix")
+  gaps <- graphnet.matrix ==0
+  return(gaps)
+}
+
+get_prt_m_ind<-function(data, indepTest, alpha, p, fixedGaps = NULL){
   ## Detect causes of the missingness indicators
-  ## R: 
   ## data:
-  ## mode: Anova test to test the conditional independence
+  ## mode: the best is Anova test to test the conditional independence (the test for continuous variables also works)
   ## ---------------------------
   ## Return: the index of parents of missingness indicators
   R<-get_m_ind(data_m)
@@ -192,14 +201,236 @@ get_prt_m_ind<-function(data, alpha=0.01, mode=Anovatest){
   
   count=1
   for(R_ind in R){
-    sup_test<- skeleton3(suffStat, indepTest=mode, R_ind=R_ind, alpha = alpha, verbose=FALSE)
-    if(length(sup_test)!=0){
+    prt_R_ind<- get_prt_R_ind(suffStat, indepTest, alpha, p, R_ind, fixedGaps=fixedGaps)
+    if(length(prt_R_ind)!=0){
       m[count] <- R_ind
-      prt[[count]]<-sup_test
+      prt[[count]]<- prt_R_ind
       count = count + 1 
     }
   }
   prt_m<-data.frame(m=m)
-  prt_m[['sup']]<-sup
+  prt_m[['prt']]<-prt
   return(prt_m)
 }
+
+get_prt_R_ind <- function(suffStat, indepTest, alpha, p, R_ind,
+                          labels,  method = c("stable", "original", "stable.fast"), 
+                          m.max = Inf, fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, numCores = 1, verbose = FALSE){
+  # the function can be regared as "<- function(suffStat, indepTest, alpha, p, R_ind, skel.ini)"
+  # This is the skeleton search algorithm adapted from skeleton(...) in pcalg
+  # 1. Change data of the R_ind column into binary missingness indicator, and the corresponding graph
+  # 2. Only test the edges between R_ind and all the other substantial variables 
+  # 3. Test with the Anovatest (because all the tests consist of a binary variable and a continuous variable give a set of continuous variables)
+  
+  cl <- match.call()
+  if (!missing(p)) 
+    stopifnot(is.numeric(p), length(p <- as.integer(p)) == 
+                1, p >= 2)
+  if (missing(labels)) {
+    if (missing(p)) 
+      stop("need to specify 'labels' or 'p'")
+    labels <- as.character(seq_len(p))
+  }
+  else {
+    stopifnot(is.character(labels))
+    if (missing(p)) 
+      p <- length(labels)
+    else if (p != length(labels)) 
+      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
+  }
+  seq_p <- seq_len(p)
+  method <- match.arg(method)
+  if (is.null(fixedGaps)) {
+    G <- matrix(TRUE, nrow = p, ncol = p)
+  }
+  else if (!identical(dim(fixedGaps), c(p, p))) 
+    stop("Dimensions of the dataset and fixedGaps do not agree.")
+  else if (!identical(fixedGaps, t(fixedGaps))) 
+    stop("fixedGaps must be symmetric")
+  else G <- !fixedGaps
+  
+  # ****** Begin adapted 1 ******
+  G[,R_ind]<-TRUE
+  G[R_ind,]<-TRUE
+  suffStat$data[,R_ind]<-as.integer(is.na(suffStat$data[,R_ind]))
+  # ****** End adapted 1 ******
+  diag(G) <- FALSE
+  
+  if (any(is.null(fixedEdges))) {
+    fixedEdges <- matrix(rep(FALSE, p * p), nrow = p, ncol = p)
+  }
+  else if (!identical(dim(fixedEdges), c(p, p))) 
+    stop("Dimensions of the dataset and fixedEdges do not agree.")
+  else if (!identical(fixedEdges, t(fixedEdges))) 
+    stop("fixedEdges must be symmetric")
+  stopifnot((is.integer(numCores) || is.numeric(numCores)) && 
+              numCores > 0)
+  if (numCores > 1 && method != "stable.fast") {
+    warning("Argument numCores ignored: parallelization only available for method = 'stable.fast'")
+  }
+  if (method == "stable.fast") {
+    if (identical(indepTest, gaussCItest)) 
+      indepTestName <- "gauss"
+    else indepTestName <- "rfun"
+    options <- list(verbose = as.integer(verbose), m.max = as.integer(ifelse(is.infinite(m.max), 
+                                                                             p, m.max)), NAdelete = NAdelete, numCores = numCores)
+    res <- .Call("estimateSkeleton", G, suffStat, indepTestName, 
+                 indepTest, alpha, fixedEdges, options)
+    G <- res$amat
+    sepset <- lapply(seq_p, function(i) c(lapply(res$sepset[[i]], 
+                                                 function(v) if (identical(v, as.integer(-1))) NULL else v), 
+                                          vector("list", p - length(res$sepset[[i]]))))
+    pMax <- res$pMax
+    n.edgetests <- res$n.edgetests
+    ord <- length(n.edgetests) - 1L
+  }
+  else {
+    pval <- NULL
+    sepset <- lapply(seq_p, function(.) vector("list", p))
+    pMax <- matrix(-Inf, nrow = p, ncol = p)
+    diag(pMax) <- 1
+    done <- FALSE
+    ord <- 0L
+    n.edgetests <- numeric(1)
+    while (!done && any(G) && ord <= m.max) {
+      n.edgetests[ord1 <- ord + 1L] <- 0
+      done <- TRUE
+      ind <- which(G, arr.ind = TRUE)
+      ind <- ind[order(ind[, 1]), ]
+      remEdges <- nrow(ind)
+      if (verbose) 
+        cat("Order=", ord, "; remaining edges:", remEdges, 
+            "\n", sep = "")
+      if (method == "stable") {
+        G.l <- split(G, gl(p, p))
+      }
+      for (i in 1:remEdges) {
+        if (verbose && (verbose >= 2 || i%%100 == 0)) 
+          cat("|i=", i, "|iMax=", remEdges, "\n")
+        x <- ind[i, 1]
+        y <- ind[i, 2]
+        
+        # ****** Begin adapted 2 ******
+        if(x!=R_ind){next}  # we only focus on the missingness variable
+        # ****** End adapted 2 ******
+        
+        if (G[y, x] && !fixedEdges[y, x]) {
+          nbrsBool <- if (method == "stable") 
+            G.l[[x]]
+          else G[, x]
+          nbrsBool[y] <- FALSE
+          nbrs <- seq_p[nbrsBool]
+          length_nbrs <- length(nbrs)
+          if (length_nbrs >= ord) {
+            if (length_nbrs > ord) 
+              done <- FALSE
+            S <- seq_len(ord)
+            repeat {
+              n.edgetests[ord1] <- n.edgetests[ord1] + 
+                1
+              pval <- indepTest(x, y, nbrs[S], suffStat)
+              if (verbose) 
+                cat("x=", x, " y=", y, " S=", nbrs[S], 
+                    ": pval =", pval, "\n")
+              if (is.na(pval)) 
+                pval <- as.numeric(NAdelete)
+              if (pMax[x, y] < pval) 
+                pMax[x, y] <- pval
+              if (pval >= alpha) {
+                G[x, y] <- G[y, x] <- FALSE
+                sepset[[x]][[y]] <- nbrs[S]
+                break
+              }
+              else {
+                nextSet <- getNextSet(length_nbrs, ord, 
+                                      S)
+                if (nextSet$wasLast) 
+                  break
+                S <- nextSet$nextSet
+              }
+            }
+          }
+        }
+      }
+      ord <- ord + 1L
+    }
+    for (i in 1:(p - 1)) {
+      for (j in 2:p) pMax[i, j] <- pMax[j, i] <- max(pMax[i, 
+                                                          j], pMax[j, i])
+    }
+  }
+  
+  prts<-G[R_ind,]
+  x<-c(1:length(suffStat$data[1,]))
+  return(x[prts])
+}
+
+
+
+#****************** Missing Value PC (MVPC) ******************
+
+mvpc<-function(suffStat, indepTest, alpha, labels, p,
+               fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
+               u2pd = c("relaxed", "rand", "retry"),
+               skel.method = c("stable", "original", "stable.fast"),
+               conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
+  # Test-wise skeleton search result as initialization for detection. 
+  # The initialization of skeleton doesnot save that much time for the detection of parents of missingness inidicators. 
+  # e.g.:100 000 data points, the time difference is within 1 second.
+  # Thus we do not initialize it at the beginning.
+  # skel.ini_ <- skeleton(suffStat, indepTest, alpha, p=p)
+  # skel.gaps= graph2gaps(skel.ini_)
+  
+  # MVPC step1: Detect parents of missingness indicators.
+  sup_var<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+  sup_var
+  # MVPC step2:
+  # a) Run PC algorithm with the 1st step skeleton;
+  # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
+}
+
+# # ********* DEMO: Test-wise deletion PC *********
+# suffStat_complete <- list(data=data_complete)
+# dag <- pc(suffStat_complete, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# shd_comp = shd(dag, myCPDAG)
+# 
+# suffStat_ref <- list(data=data_ref)
+# suffStat_ref_lw_del<- list(data=test_wise_deletion(1:num_var, data_ref))
+# 
+# dag_lw <- pc(suffStat_ref_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# shd_ref_lw = shd(dag_lw, myCPDAG)
+# 
+# dag_tw <- pc(suffStat_ref, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# shd_ref_tw = shd(dag_tw, myCPDAG)
+# 
+# suffStat_m <- list(data=data_m)
+# suffStat_m_lw_del<- list(data=test_wise_deletion(1:num_var, data_m))
+# 
+# dag_m_lw <- pc(suffStat_m_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# dag_m_tw <- pc(suffStat_m, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# shd_m_lw = shd(dag_m_lw, myCPDAG)
+# shd_m_tw = shd(dag_m_tw, myCPDAG)
+# 
+# print(shd_comp)
+# print(shd_ref_lw)
+# print(shd_ref_tw)
+# print(shd_m_lw)
+# print(shd_m_tw)
+
+
+# # *********  DEMO: Test the independence of a binary and a continuous variable with the continuous test********* 
+# # The result is that we can get the correct result that they are independent or not 
+# 
+# a = 1:100
+# b=as.integer(a>50)
+# data_t = data.frame(a)
+# data_t[,2]=b
+# cor(data_t)
+# suffStat_t = list(data=data_t)
+# gaussCItest_tw_del(1, 2, c(), suffStat_t)
+# 
+# b2 = sample(b)
+# data_t[,2]=b2
+# cor(data_t)
+# suffStat_t = list(data=data_t)
+# gaussCItest_tw_del(1, 2, c(), suffStat_t)
