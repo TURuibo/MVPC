@@ -2,6 +2,7 @@ library(pcalg)
 library(mvtnorm)
 
 #******************Functions for synthetic data generation******************
+
 gen_data <- function(p,n,mode='mar',seed=1000){
   # p: number of variables 
   # n: data sample size
@@ -128,7 +129,9 @@ detect_colliders<-function(myDAG){
 # Example of generating synthetic data
 # gen_data(20,10,"mnar")
 
+
 #****************** Independence test ****************** 
+
 gaussCItest_tw_del <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
@@ -163,7 +166,9 @@ PermCCItest <- function(x, y, S, suffStat){}
 
 DRWCItest <- function(x, y, S, suffStat){}
 
+
 #****************** Functions of extracting necessary information for MVPC ******************
+
 get_m_ind <- function(data){
   ## Check whether the current testing variables containing missing variables 
   ## Value: return TRUE or FALSE
@@ -387,6 +392,17 @@ mvpc<-function(suffStat, indepTest, alpha, labels, p,
   # MVPC step2:
   # a) Run PC algorithm with the 1st step skeleton;
   # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
+}
+
+#****************** Evaluation ******************
+
+eva.detection<-function(prt1,prt2){
+  count = 0
+  for(i in 1:length(prt1)){
+    if(length(prt1[i])!=length(prt2[[i]])){count = count + 1 }
+    else if(prt1[i]!=prt2[[i]]){count = count + 1 }
+  }
+  return(count)
 }
 
 # # ********* DEMO: Test-wise deletion PC *********
