@@ -1,7 +1,8 @@
 library(pcalg)
 library(mvtnorm)
 
-#******************Functions for synthetic data generation******************
+
+#******************Functions for Synthetic Data Generation******************
 
 gen_data <- function(p,n,mode='mar',seed=1000){
   # p: number of variables 
@@ -130,7 +131,7 @@ detect_colliders<-function(myDAG){
 # gen_data(20,10,"mnar")
 
 
-#****************** Independence test ****************** 
+#****************** (Conditional) Independence Test ****************** 
 
 gaussCItest_tw_del <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
@@ -166,8 +167,28 @@ PermCCItest <- function(x, y, S, suffStat){}
 
 DRWCItest <- function(x, y, S, suffStat){}
 
+#****************** Missing Value PC (MVPC) ******************
 
-#****************** Functions of extracting necessary information for MVPC ******************
+mvpc<-function(suffStat, indepTest, alpha, labels, p,
+               fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
+               u2pd = c("relaxed", "rand", "retry"),
+               skel.method = c("stable", "original", "stable.fast"),
+               conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
+  # Test-wise skeleton search result as initialization for detection. 
+  # The initialization of skeleton doesnot save that much time for the detection of parents of missingness inidicators. 
+  # e.g.:100 000 data points, the time difference is within 1 second.
+  # Thus we do not initialize it at the beginning.
+  # skel.ini_ <- skeleton(suffStat, indepTest, alpha, p=p)
+  # skel.gaps= graph2gaps(skel.ini_)
+  
+  # MVPC step1: Detect parents of missingness indicators.
+  sup_var<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+  sup_var
+  # MVPC step2:
+  # a) Run PC algorithm with the 1st step skeleton;
+  # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
+}
+
 
 get_m_ind <- function(data){
   ## Check whether the current testing variables containing missing variables 
@@ -370,29 +391,6 @@ get_prt_R_ind <- function(suffStat, indepTest, alpha, p, R_ind,
   return(x[prts])
 }
 
-
-
-#****************** Missing Value PC (MVPC) ******************
-
-mvpc<-function(suffStat, indepTest, alpha, labels, p,
-               fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
-               u2pd = c("relaxed", "rand", "retry"),
-               skel.method = c("stable", "original", "stable.fast"),
-               conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
-  # Test-wise skeleton search result as initialization for detection. 
-  # The initialization of skeleton doesnot save that much time for the detection of parents of missingness inidicators. 
-  # e.g.:100 000 data points, the time difference is within 1 second.
-  # Thus we do not initialize it at the beginning.
-  # skel.ini_ <- skeleton(suffStat, indepTest, alpha, p=p)
-  # skel.gaps= graph2gaps(skel.ini_)
-  
-  # MVPC step1: Detect parents of missingness indicators.
-  sup_var<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  sup_var
-  # MVPC step2:
-  # a) Run PC algorithm with the 1st step skeleton;
-  # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
-}
 
 #****************** Evaluation ******************
 
