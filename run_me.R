@@ -29,8 +29,9 @@ cat("Number of colliders that are parents of missingness inidcators: ", length(i
 # ********* MVPC *********
 
 suffStat_m <- list(data=data_m)
-res<-mvpc(suffStat_m, gaussCItest_tw_del, alpha=0.01, p=num_var)
+res<-mvpc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
 print(gth)
 print(res)
 res <- data.frame(res)
 cat("The wrong number of causes: ", eva.detection(gth$prt,res$prt))
+# ********* MVPC *********

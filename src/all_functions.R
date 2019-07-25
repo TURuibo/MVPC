@@ -80,15 +80,15 @@ gen_del <- function(p,n,myDAG,mode='mar',num_m=6){
               m_ind=m_ind)) 
 }
 
-select_m_ind<-function(num_var,num_m){
+select_m_ind <- function(num_var,num_m){
   return(sample(x=1:num_var,size=num_m,replace=FALSE))
 }
 
-select_prt_mar_ind<-function(m_ind,num_var){
+select_prt_mar_ind <- function(m_ind,num_var){
   return(sample(x=setdiff(1:num_var,m_ind),size=length(m_ind),replace=TRUE))
 }
 
-select_prt_mnar_ind<-function(m_ind,num_var){
+select_prt_mnar_ind <- function(m_ind,num_var){
   # No self-masking
   # only the variable contains missing values can be the parents of missingness indicators
   prts = c()
@@ -99,7 +99,7 @@ select_prt_mnar_ind<-function(m_ind,num_var){
   return(prts)
 }
 
-generate_missing_values<-function(p,n,myDAG,m_ind,parent_m_ind){
+generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
   # Give the parents of missingness indicators, and the missingness indcators
   # The missing values are generated whn the parent values are in the bottom XX percentage.
   data <- rmvnorm(n, mean=rep(0,p), sigma=trueCov(myDAG))
@@ -118,7 +118,7 @@ generate_missing_values<-function(p,n,myDAG,m_ind,parent_m_ind){
               data_ref=data_mcar))
 }
 
-detect_colliders<-function(myDAG){
+detect_colliders <- function(myDAG){
   m <- as(myDAG,"matrix")
   m[m>0]<-1
   ind <- colSums(m,1)>1
@@ -133,7 +133,7 @@ detect_colliders<-function(myDAG){
 
 #****************** (Conditional) Independence Test ****************** 
 
-gaussCItest_tw_del <- function(x, y, S, suffStat) {
+gaussCItest_td <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
   ## suffStat: the class contains the dataset and other necessary variables
@@ -146,6 +146,12 @@ gaussCItest_tw_del <- function(x, y, S, suffStat) {
              C = cor(data), n = length(data[,1]))
   2*pnorm(abs(z), lower.tail = FALSE)
 }
+
+PermCCItest <- function(x, y, S, suffStat){
+  
+}
+
+DRWCItest <- function(x, y, S, suffStat){}
 
 test_wise_deletion <-function(var_ind, data){
   ## Delete the rows of given variables (var_ind) if there is a missing value in a row
@@ -163,9 +169,7 @@ test_wise_deletion <-function(var_ind, data){
   return(data[not_del_ind,])
 }
 
-PermCCItest <- function(x, y, S, suffStat){}
 
-DRWCItest <- function(x, y, S, suffStat){}
 
 #****************** Missing Value PC (MVPC) ******************
 
@@ -189,7 +193,6 @@ mvpc<-function(suffStat, indepTest, alpha, labels, p,
   # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
 }
 
-
 get_m_ind <- function(data){
   ## Check whether the current testing variables containing missing variables 
   ## Value: return TRUE or FALSE
@@ -204,7 +207,7 @@ get_m_ind <- function(data){
   return(m_ind)
 }
 
-graph2gaps<-function(graphnet){
+graph2gaps <- function(graphnet){
   # graphnet: a graphNet class which is defined in pcalg
   #
   # ******************
@@ -214,7 +217,7 @@ graph2gaps<-function(graphnet){
   return(gaps)
 }
 
-get_prt_m_ind<-function(data, indepTest, alpha, p, fixedGaps = NULL){
+get_prt_m_ind <- function(data, indepTest, alpha, p, fixedGaps = NULL){
   ## Detect causes of the missingness indicators
   ## data:
   ## mode: the best is Anova test to test the conditional independence (the test for continuous variables also works)
@@ -405,23 +408,23 @@ eva.detection<-function(prt1,prt2){
 
 # # ********* DEMO: Test-wise deletion PC *********
 # suffStat_complete <- list(data=data_complete)
-# dag <- pc(suffStat_complete, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# dag <- pc(suffStat_complete, gaussCItest_td, alpha=0.01, p=num_var)
 # shd_comp = shd(dag, myCPDAG)
 # 
 # suffStat_ref <- list(data=data_ref)
 # suffStat_ref_lw_del<- list(data=test_wise_deletion(1:num_var, data_ref))
 # 
-# dag_lw <- pc(suffStat_ref_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# dag_lw <- pc(suffStat_ref_lw_del, gaussCItest_td, alpha=0.01, p=num_var)
 # shd_ref_lw = shd(dag_lw, myCPDAG)
 # 
-# dag_tw <- pc(suffStat_ref, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# dag_tw <- pc(suffStat_ref, gaussCItest_td, alpha=0.01, p=num_var)
 # shd_ref_tw = shd(dag_tw, myCPDAG)
 # 
 # suffStat_m <- list(data=data_m)
 # suffStat_m_lw_del<- list(data=test_wise_deletion(1:num_var, data_m))
 # 
-# dag_m_lw <- pc(suffStat_m_lw_del, gaussCItest_tw_del, alpha=0.01, p=num_var)
-# dag_m_tw <- pc(suffStat_m, gaussCItest_tw_del, alpha=0.01, p=num_var)
+# dag_m_lw <- pc(suffStat_m_lw_del, gaussCItest_td, alpha=0.01, p=num_var)
+# dag_m_tw <- pc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
 # shd_m_lw = shd(dag_m_lw, myCPDAG)
 # shd_m_tw = shd(dag_m_tw, myCPDAG)
 # 
@@ -441,10 +444,10 @@ eva.detection<-function(prt1,prt2){
 # data_t[,2]=b
 # cor(data_t)
 # suffStat_t = list(data=data_t)
-# gaussCItest_tw_del(1, 2, c(), suffStat_t)
+# gaussCItest_td(1, 2, c(), suffStat_t)
 # 
 # b2 = sample(b)
 # data_t[,2]=b2
 # cor(data_t)
 # suffStat_t = list(data=data_t)
-# gaussCItest_tw_del(1, 2, c(), suffStat_t)
+# gaussCItest_td(1, 2, c(), suffStat_t)
