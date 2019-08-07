@@ -10,7 +10,7 @@ logis <- function(x,y){
   return(1/(1+exp(-(x+y))))
 }
 
-n = 10000
+n = 100000
 a =  rnorm(n, 0, 1)
 b =  rnorm(n, 0, 1)
 e =  rnorm(n, 0, 1)
@@ -44,7 +44,7 @@ data_t3[,1] = data_t3[,1]-1000000*exp(-(1/1000000)*(data_t3[,1]+data_t3[,2]))
 # data_t3[,1]=data_t2[,1]+c*data_t2[,2]
 
 cor(data_t3)
-suffStat_t3 = list(C=cor(data_t3), n=length(data_t3[,1]))
+suffStat_t3 = list(C=cor(data_t3), n=sum(r))
 gaussCItest(1, 2, c(), suffStat_t3)
 # 
 par(mfrow=c(1,2))

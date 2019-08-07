@@ -37,3 +37,5 @@ beta = beta[r]
 suffStat_t  = list(C=wtd.cors(data_t2,data_t2,beta), n=sum(rx))
 gaussCItest(1, 2, c(), suffStat_t)
 
+# what if we involve unnecessary correction ?
+

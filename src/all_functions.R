@@ -160,20 +160,70 @@ DRWCItest <- function(x, y, S, suffStat){
   else{
     # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
     # Note that data for training the logistic regression are different with the data used for computing weights.
-    ri = as.integer(ri) 
-    logidata <- data.frame(pa(ri), ri)
-    glm.fit <- glm(ri ~ pa(ri), data = logidata, family = binomial)
+    ind_r_xys <- get_ind_r_xys(x, y, S, suffStat)
+    weights = sum(rx)/length(rx)  # "ri = 0" means missing value
+    ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
     
-    # Compute the weights 
-    glm.probsi = predict(glm.fit, newdata = data.frame(pa(ri)), type = "response")
-    betai = 1/glm.probsi
-    
-    beta = sum(rx)/length(rx) * betai *#... 
+    for(ind_ri in ind_r_xys){
+      logidata <- get_logidata(ind_ri,  suffStat)
+      fmla <- get_logi_formula(length(logidata))
+      logi.fit <- glm(fmla, data = logidata, family = binomial)
       
-    # Weighted the correlation   
-    suffStat_drw  = list(C=wtd.cors(data_td,data_td,beta), n=sum(r))
+      prt_i <- get_prt_i(ind_ri, suffStat)
+      logi.prob = logi.fit %>% predict(suffStat$data[ind,prt_i], type = "response")  # TODO: check what if the name of the column is different with the formula
+      
+      weights = weights * (1/logi.prob)
+    }
+    
+    # Weighted the correlation
+    data_td <- suffStat$data[ind,]
+    suffStat_drw  = list(C=wtd.cors(data_td,data_td,weights), n=length(weights))
     gaussCItest(x, y, S, suffStat_drw)
   }
+}
+
+get_logi_formula <- function(len){
+  xnam <- paste0("logidata[,", 2:len,"]")
+  as.formula(paste("logidata[,1] ~ ", paste(xnam, collapse= "+")))
+}
+
+get_ind_weights <- function(ind_r_xys,  suffStat){
+  var_ind <- c(ind_r_xys)
+  for(ind_ri in ind_r_xys){
+    var_ind <- union(var_ind,get_prt_i(ind_ri, suffStat))
+  }
+  data = suffStat$data
+  
+  not_del_ind = c(rep(TRUE,length(data[,1])))
+  for (var in var_ind){
+    if(anyNA(data[,var])){
+      not_del_ind = not_del_ind & !is.na(data[,var])
+    }
+  } 
+  return(not_del_ind)
+}
+
+get_prt_i(ind_ri, suffStat)<- function(){
+  suffSat$par_m['prt'][suffSat$par_m['m'] == ind_ri]
+}
+  
+get_logidata <- function(ind_ri,  suffStat){
+  prt_i <- get_prt_i(ind_ri, suffStat)
+  ri <- is.integer(!is.na(suffSat$data[,ind_ri]))
+  logidata <- data.frame(ri, suffSat$data[,prt_ind])
+  test_wise_deletion(1:length(logidata[1,]), logidata)  
+}
+
+
+get_ind_r_xys <- function(x, y, S, suffStat){
+  # return index of missingness indicators of x, y, S
+  ind_r_xys <- c()
+  for(i in c(x,y,S)){
+    if(sum(is.na(suffStat$data[,i]))>0){
+      ind_r_xys = c(ind_r_xys,i) 
+      }
+  }
+  return(ind_r_xys)
 }
 
 test_wise_deletion <-function(var_ind, data){
@@ -209,8 +259,8 @@ mvpc<-function(suffStat, indepTest, alpha, labels, p,
   # skel.gaps= graph2gaps(skel.ini_)
   
   # MVPC step1: Detect parents of missingness indicators.
-  sup_var<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  sup_var
+  prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+  prt_m
   # MVPC step2:
   # a) Run PC algorithm with the 1st step skeleton;
   # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).

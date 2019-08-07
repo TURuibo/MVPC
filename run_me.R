@@ -34,4 +34,5 @@ print(gth)
 print(res)
 res <- data.frame(res)
 cat("The wrong number of causes: ", eva.detection(gth$prt,res$prt))
+
 # ********* MVPC *********
