@@ -151,7 +151,30 @@ PermCCItest <- function(x, y, S, suffStat){
   
 }
 
-DRWCItest <- function(x, y, S, suffStat){}
+DRWCItest <- function(x, y, S, suffStat){
+  
+  # Determine whether the current case satisfies the condition of correction
+  if(! iscorr(x, y, S, suffStat)){
+    gaussCItest_td(x, y, S, suffStat)
+  }
+  else{
+    # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
+    # Note that data for training the logistic regression are different with the data used for computing weights.
+    ri = as.integer(ri) 
+    logidata <- data.frame(pa(ri), ri)
+    glm.fit <- glm(ri ~ pa(ri), data = logidata, family = binomial)
+    
+    # Compute the weights 
+    glm.probsi = predict(glm.fit, newdata = data.frame(pa(ri)), type = "response")
+    betai = 1/glm.probsi
+    
+    beta = sum(rx)/length(rx) * betai *#... 
+      
+    # Weighted the correlation   
+    suffStat_drw  = list(C=wtd.cors(data_td,data_td,beta), n=sum(r))
+    gaussCItest(x, y, S, suffStat_drw)
+  }
+}
 
 test_wise_deletion <-function(var_ind, data){
   ## Delete the rows of given variables (var_ind) if there is a missing value in a row
