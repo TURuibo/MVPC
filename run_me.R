@@ -9,7 +9,7 @@ source(paste(src_path,'/all_functions.R',sep=""))
 # ********* Synthethic data generation ********* 
 
 num_var = 20
-num_sample = 1000
+num_sample = 100
 rdm_seed = 1
 
 gen_result_list<-gen_data(num_var,num_sample,"mnar",rdm_seed)
@@ -36,3 +36,5 @@ res <- data.frame(res)
 cat("The wrong number of causes: ", eva.detection(gth$prt,res$prt))
 
 # ********* MVPC *********
+prt_m <- res
+suffStat_m <- list(data=data_m, prt_m = res)

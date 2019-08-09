@@ -1,5 +1,7 @@
 library(pcalg)
 library(mvtnorm)
+library(weights)
+library(ks)
 
 
 #******************Functions for Synthetic Data Generation******************
@@ -161,17 +163,21 @@ DRWCItest <- function(x, y, S, suffStat){
     # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
     # Note that data for training the logistic regression are different with the data used for computing weights.
     ind_r_xys <- get_ind_r_xys(x, y, S, suffStat)
-    weights = sum(rx)/length(rx)  # "ri = 0" means missing value
     ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
+    weights = sum(ind)/length(ind)  # "ri = 0" means missing value
     
     for(ind_ri in ind_r_xys){
       logidata <- get_logidata(ind_ri,  suffStat)
       fmla <- get_logi_formula(length(logidata))
-      logi.fit <- glm(fmla, data = logidata, family = binomial)
+      logi.fit <- glm(formula = as.formula(fmla), data = logidata, family = binomial)
       
       prt_i <- get_prt_i(ind_ri, suffStat)
-      logi.prob = logi.fit %>% predict(suffStat$data[ind,prt_i], type = "response")  # TODO: check what if the name of the column is different with the formula
       
+      logidata = data.frame(r = 1:length(sum(ind)), prt = suffStat$data[ind,prt_i])
+      logi.prob = predict(logi.fit, logidata, type = "response")  
+      # TODO: check what if the name of the column is different with the formula
+      # it should have the same name with the formula
+      # it follow the formula slicing way when input the same name with formula
       weights = weights * (1/logi.prob)
     }
     
@@ -182,9 +188,15 @@ DRWCItest <- function(x, y, S, suffStat){
   }
 }
 
+iscorr<- function(x, y, S, suffStat){
+  return(TRUE)
+}
+
+
 get_logi_formula <- function(len){
-  xnam <- paste0("logidata[,", 2:len,"]")
-  as.formula(paste("logidata[,1] ~ ", paste(xnam, collapse= "+")))
+  xnam <- paste0("logidata[,", 2:len,"]","")
+  # as.formula(paste("logidata[,1] ~ ", paste(xnam, collapse= "+")))
+  paste("logidata[,1] ~ ", paste(xnam, collapse= "+"))
 }
 
 get_ind_weights <- function(ind_r_xys,  suffStat){
@@ -203,14 +215,15 @@ get_ind_weights <- function(ind_r_xys,  suffStat){
   return(not_del_ind)
 }
 
-get_prt_i(ind_ri, suffStat)<- function(){
-  suffSat$par_m['prt'][suffSat$par_m['m'] == ind_ri]
+get_prt_i<- function(ind_ri, suffStat){
+  prt_cell <- suffStat$prt_m['prt'][suffStat$prt_m['m'] == ind_ri]
+  prt_cell[[1]]
 }
   
 get_logidata <- function(ind_ri,  suffStat){
   prt_i <- get_prt_i(ind_ri, suffStat)
-  ri <- is.integer(!is.na(suffSat$data[,ind_ri]))
-  logidata <- data.frame(ri, suffSat$data[,prt_ind])
+  ri <- as.integer(!is.na(suffStat$data[,ind_ri]))
+  logidata <- data.frame(ri, suffStat$data[,prt_i])
   test_wise_deletion(1:length(logidata[1,]), logidata)  
 }
 
