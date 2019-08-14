@@ -135,6 +135,21 @@ detect_colliders <- function(myDAG){
 
 #****************** (Conditional) Independence Test ****************** 
 
+
+binCItest_td <- function(x, y, S, suffStat){
+  data = test_wise_deletion(c(x,y,S),suffStat$dm)
+  suffStat$dm = data
+
+  binCItest(x, y, S, suffStat)
+  
+  
+}
+
+DRWbinCItest <- function(x, y, S, suffStat){
+  
+  
+}
+
 gaussCItest_td <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
@@ -144,9 +159,13 @@ gaussCItest_td <- function(x, y, S, suffStat) {
   ## Return: the p-value of the test 
   
   data = test_wise_deletion(c(x,y,S),suffStat$data)
-  z <- zStat(x,y,S, 
-             C = cor(data), n = length(data[,1]))
-  2*pnorm(abs(z), lower.tail = FALSE)
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
+  # z <- zStat(x,y,S, 
+  #            C = cor(data), n = length(data[,1]))
+  # 2*pnorm(abs(z), lower.tail = FALSE)
 }
 
 PermCCItest <- function(x, y, S, suffStat){
@@ -192,7 +211,6 @@ iscorr<- function(x, y, S, suffStat){
   return(TRUE)
 }
 
-
 get_logi_formula <- function(len){
   xnam <- paste0("logidata[,", 2:len,"]","")
   # as.formula(paste("logidata[,1] ~ ", paste(xnam, collapse= "+")))
@@ -227,7 +245,6 @@ get_logidata <- function(ind_ri,  suffStat){
   test_wise_deletion(1:length(logidata[1,]), logidata)  
 }
 
-
 get_ind_r_xys <- function(x, y, S, suffStat){
   # return index of missingness indicators of x, y, S
   ind_r_xys <- c()
@@ -254,8 +271,6 @@ test_wise_deletion <-function(var_ind, data){
   }  
   return(data[not_del_ind,])
 }
-
-
 
 #****************** Missing Value PC (MVPC) ******************
 
