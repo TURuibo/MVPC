@@ -139,10 +139,7 @@ detect_colliders <- function(myDAG){
 binCItest_td <- function(x, y, S, suffStat){
   data = test_wise_deletion(c(x,y,S),suffStat$dm)
   suffStat$dm = data
-
   binCItest(x, y, S, suffStat)
-  
-  
 }
 
 DRWbinCItest <- function(x, y, S, suffStat){
@@ -286,12 +283,68 @@ mvpc<-function(suffStat, indepTest, alpha, labels, p,
   # skel.ini_ <- skeleton(suffStat, indepTest, alpha, p=p)
   # skel.gaps= graph2gaps(skel.ini_)
   
-  # MVPC step1: Detect parents of missingness indicators.
+  ## MVPC step1: Detect parents of missingness indicators.
   prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  prt_m
-  # MVPC step2:
+  
+  suffStat$prt_m = prt_m
+  ## MVPC step2:
   # a) Run PC algorithm with the 1st step skeleton;
-  # b) Correct the wrong edges of it with permutation-based CI test (PermCCItest) and density ratio weighted CI test (DRWCItest).
+  cl <- match.call()
+  if (!missing(p))
+    stopifnot(is.numeric(p), length(p <- as.integer(p)) ==
+                1, p >= 2)
+  if (missing(labels)) {
+    if (missing(p))
+      stop("need to specify 'labels' or 'p'")
+    labels <- as.character(seq_len(p))
+  }
+  else {
+    stopifnot(is.character(labels))
+    if (missing(p)) {
+      p <- length(labels)
+    }
+    else if (p != length(labels))
+      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
+    else message("No need to specify 'p', when 'labels' is given")
+  }
+  u2pd <- match.arg(u2pd)
+  skel.method <- match.arg(skel.method)
+  if (u2pd != "relaxed") {
+    if (conservative || maj.rule)
+      stop("Conservative PC and majority rule PC can only be run with 'u2pd = relaxed'")
+    if (solve.confl)
+      stop("Versions of PC using lists for the orientation rules (and possibly bi-directed edges)\n can only be run with 'u2pd = relaxed'")
+  }
+  if (conservative && maj.rule)
+    stop("Choose either conservative PC or majority rule PC!")
+
+  skel <- skeleton(suffStat, indepTest, alpha, labels = labels,
+                   method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
+                   NAdelete = NAdelete, m.max = m.max, numCores = numCores,
+                   verbose = verbose)
+
+  suffStat$skel = skel  # For test whether the test need to do the correction
+  fixedGaps <- graph2gaps(skel)
+
+  # b) Correction of the extra edges
+  skel <- skeleton(suffStat, indepTest, alpha, labels = labels,
+                   method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
+                   NAdelete = NAdelete, m.max = m.max, numCores = numCores,
+                   verbose = verbose)
+
+  # c) Orient the edges
+  skel@call <- cl
+  if (!conservative && !maj.rule) {
+    switch(u2pd, rand = udag2pdag(skel), retry = udag2pdagSpecial(skel)$pcObj,
+           relaxed = udag2pdagRelaxed(skel, verbose = verbose,
+                                      solve.confl = solve.confl))
+  }
+  else {
+    pc. <- pc.cons.intern(skel, suffStat, indepTest, alpha,
+                          version.unf = c(2, 1), maj.rule = maj.rule, verbose = verbose)
+    udag2pdagRelaxed(pc.$sk, verbose = verbose, unfVect = pc.$unfTripl,
+                     solve.confl = solve.confl)
+  }
 }
 
 get_m_ind <- function(data){
