@@ -9,16 +9,24 @@ mis_f<-function(y){
   if(y < 0) 
     rbinom(1,1,0.99) == 1
   else 
-    rbinom(1,1,0.01) == 1
+    rbinom(1,1,0.1) == 1
 } 
 
 # Data generation
-n = 1000000
-a =  rnorm(n, 0, 1)
-b =  rnorm(n, 0, 1)
-e =  rnorm(n, 0, 1)
+n = 10000
+c= rnorm(n, 0, 1)
+a = c+rnorm(n, 0, 1)
+b =  c+rnorm(n, 0, 1)
+e = rnorm(n, 0, 1)
 data_t = data.frame(a)
 data_t[,2]=b
+
+par(mfrow=c(2,2))
+plot(data_t,xlim = c(-4,4),asp=1)
+plot(data_t[a>0,],xlim = c(-4,4),asp=1)
+plot(data_t[a-0.3*b>0,],xlim = c(-4,4),asp=1)
+plot(data_t[a-0.3*b+e>0,],xlim = c(-4,4),asp=1)
+
 
 # Independence test 
 suffStat_t  = list(C=cor(data_t), n=n)
@@ -39,17 +47,10 @@ suffStat_t1 = list(data=data_t2)
 gaussCItest_td(1, 2, c(), suffStat_t1)
 
 
-# logistic-reweighted method
-rx = as.integer(r) 
-logidata <- data.frame(rx,w)
-glm.fit <- glm(rx ~  w, data = logidata, family = binomial)
-glm.probs = predict(glm.fit, newdata = data.frame(w), type = "response")
-beta1 = sum(rx)/length(rx) * (1/glm.probs)
-beta1 = beta1[r]
 
 beta = w
 beta[w<0] = 1/0.99
-beta[!w<0] = 1/0.01
+beta[!w<0] = 1/0.1
 beta = sum(rx)/length(rx) * beta
 beta = beta[r]
 
@@ -83,20 +84,15 @@ data_t5 = data_t
 data_t5[!r,1] = NA
 data_t5[,1] = log(1+exp(w))/(sum(r)/length(r))
 suffStat5 <- list(C= cor(data_t5), n=length(data_t5[,1]))
-
-gaussCItest(1, 2, c(), suffStat5)
-
-
-gaussCItest(1, 2, c(), suffStat_t)
-
-gaussCItest_td(1, 2, c(), suffStat_t1)
-
-gaussCItest(1, 2, c(), suffStat_t2)
-
-gaussCItest(1, 2, c(), suffStat_t3)
-
 DRWCItest(1, 2, c(), suffStat4)
 
+# logistic-reweighted method
+# rx = as.integer(r) 
+# logidata <- data.frame(rx,w)
+# glm.fit <- glm(rx ~  w, data = logidata, family = binomial)
+# glm.probs = predict(glm.fit, newdata = data.frame(w), type = "response")
+# beta1 = sum(rx)/length(rx) * (1/glm.probs)
+# beta1 = beta1[r]
 # 
 # # Independence test 
 # data_t2 = data_t

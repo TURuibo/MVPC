@@ -25,16 +25,9 @@ gth = data.frame(m=m,prt=prt)
 gth <- gth[order(gth$m),] 
 cat("Number of colliders that are parents of missingness inidcators: ", length(intersect(prt, collider)))
 
-
 # ********* MVPC *********
 
 suffStat_m <- list(data=data_m)
-res<-mvpc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
-print(gth)
-print(res)
-res <- data.frame(res)
-cat("The wrong number of causes: ", eva.detection(gth$prt,res$prt))
+res_mvpc<-mvpc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
+res_pc<-pc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
 
-# ********* MVPC *********
-prt_m <- res
-suffStat_m <- list(data=data_m, prt_m = res)

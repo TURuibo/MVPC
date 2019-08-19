@@ -166,7 +166,42 @@ gaussCItest_td <- function(x, y, S, suffStat) {
 }
 
 PermCCItest <- function(x, y, S, suffStat){
+  ## Permutation-based correction methods 
+  # Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
+  W = get_prt_m_xys(c(x,y,S), suffStat$prt_m)# Get parents the {xyS} missingness indicators: prt_m
+  ind_permc <- c(x, y, S, W)
+  ind_test <- c(x, y, S)
+  data <- test_wise_deletion(ind_permc, suffStat$data)
+  data <- data[,ind_permc]
   
+  xnam <- paste0("data[,", length(ind_test):length(ind_permc),"]")
+  lr <- list()
+  res <- list()
+  for( i in 1:ind_test){
+    fmla <- as.formula(paste("data[,", i,"] ~ 0 + ", paste(xnam, collapse= "+"),""))
+    fit[[i]] <- lm(formula = fmla, data = data) # the ith block of list is ...
+    res[[i]] <- residuals(fit[i]) # residuals
+  }
+  
+  # Step 2: Shuffle the source "W" -- parents of the missingness indicators
+  # a) Remove the missing entries of dat[, W]
+  # b) Row-based/ sample based Shuffle the index of W data points
+  # c) the same number of test-wise deletion CI Test 
+  W_p = perm(W, suffStat$data)
+  
+  data[,length(ind_test):length(ind_permc)] = W_p[1:length(data[,1]),]
+  # Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
+  vir <- list()
+  for(i in ind_test){
+    vir[[i]] = predict(fit[[i]],list(data)) + res[[i]] 
+  }
+  
+  data_perm = data.frame(vir[[1]])
+  for(i in ind_test){
+    data_perm[,i]=vir[[i]]  
+  }
+  suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
+  gaussCItest_td(1, 2, 3:length(ind_test), suffStat_perm)
 }
 
 DRWCItest <- function(x, y, S, suffStat){
@@ -269,6 +304,13 @@ test_wise_deletion <-function(var_ind, data){
   return(data[not_del_ind,])
 }
 
+get_prt_m_xys<-function(ind, prt_m){
+  
+}
+
+perm <- function(W, data){
+  
+}
 #****************** Missing Value PC (MVPC) ******************
 
 mvpc<-function(suffStat, indepTest, alpha, labels, p,
@@ -559,49 +601,3 @@ eva.detection<-function(prt1,prt2){
   }
   return(count)
 }
-
-# # ********* DEMO: Test-wise deletion PC *********
-# suffStat_complete <- list(data=data_complete)
-# dag <- pc(suffStat_complete, gaussCItest_td, alpha=0.01, p=num_var)
-# shd_comp = shd(dag, myCPDAG)
-# 
-# suffStat_ref <- list(data=data_ref)
-# suffStat_ref_lw_del<- list(data=test_wise_deletion(1:num_var, data_ref))
-# 
-# dag_lw <- pc(suffStat_ref_lw_del, gaussCItest_td, alpha=0.01, p=num_var)
-# shd_ref_lw = shd(dag_lw, myCPDAG)
-# 
-# dag_tw <- pc(suffStat_ref, gaussCItest_td, alpha=0.01, p=num_var)
-# shd_ref_tw = shd(dag_tw, myCPDAG)
-# 
-# suffStat_m <- list(data=data_m)
-# suffStat_m_lw_del<- list(data=test_wise_deletion(1:num_var, data_m))
-# 
-# dag_m_lw <- pc(suffStat_m_lw_del, gaussCItest_td, alpha=0.01, p=num_var)
-# dag_m_tw <- pc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
-# shd_m_lw = shd(dag_m_lw, myCPDAG)
-# shd_m_tw = shd(dag_m_tw, myCPDAG)
-# 
-# print(shd_comp)
-# print(shd_ref_lw)
-# print(shd_ref_tw)
-# print(shd_m_lw)
-# print(shd_m_tw)
-
-
-# # *********  DEMO: Test the independence of a binary and a continuous variable with the continuous test********* 
-# # The result is that we can get the correct result that they are independent or not 
-# 
-# a = 1:100
-# b=as.integer(a>50)
-# data_t = data.frame(a)
-# data_t[,2]=b
-# cor(data_t)
-# suffStat_t = list(data=data_t)
-# gaussCItest_td(1, 2, c(), suffStat_t)
-# 
-# b2 = sample(b)
-# data_t[,2]=b2
-# cor(data_t)
-# suffStat_t = list(data=data_t)
-# gaussCItest_td(1, 2, c(), suffStat_t)
