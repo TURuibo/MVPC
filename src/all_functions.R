@@ -166,42 +166,49 @@ gaussCItest_td <- function(x, y, S, suffStat) {
 }
 
 PermCCItest <- function(x, y, S, suffStat){
-  ## Permutation-based correction methods 
-  # Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
-  W = get_prt_m_xys(c(x,y,S), suffStat$prt_m)# Get parents the {xyS} missingness indicators: prt_m
+  ## The Z <- XY; Rz <- XY is not included in the test 
+  ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
+  W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
   ind_permc <- c(x, y, S, W)
   ind_test <- c(x, y, S)
   data <- test_wise_deletion(ind_permc, suffStat$data)
   data <- data[,ind_permc]
   
-  xnam <- paste0("data[,", length(ind_test):length(ind_permc),"]")
+  xnam <- paste0("data[,", (length(ind_test)+1):length(ind_permc),"]")
   lr <- list()
   res <- list()
-  for( i in 1:ind_test){
+  for( i in ind_test){
     fmla <- as.formula(paste("data[,", i,"] ~ 0 + ", paste(xnam, collapse= "+"),""))
-    fit[[i]] <- lm(formula = fmla, data = data) # the ith block of list is ...
-    res[[i]] <- residuals(fit[i]) # residuals
+    lr[[i]] <- lm(formula = fmla, data = data)  # the ith block of list is ...
+    res[[i]] <- residuals(lr[[i]])  # residuals
   }
   
-  # Step 2: Shuffle the source "W" -- parents of the missingness indicators
-  # a) Remove the missing entries of dat[, W]
-  # b) Row-based/ sample based Shuffle the index of W data points
-  # c) the same number of test-wise deletion CI Test 
-  W_p = perm(W, suffStat$data)
+  ## Step 2: Shuffle the source "W" -- parents of the missingness indicators
+  #         a) Remove the missing entries of dat[, W]
+  #         b) Row-based/ sample based Shuffle the index of W data points
+  #         c) the same number of test-wise deletion CI Test 
+  data_W_p = perm(W, suffStat$data)
+  data[,(length(ind_test)+1):length(ind_permc)] = data_W_p[1:length(data[,1]),]
   
-  data[,length(ind_test):length(ind_permc)] = W_p[1:length(data[,1]),]
-  # Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
+  ## Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
   vir <- list()
   for(i in ind_test){
-    vir[[i]] = predict(fit[[i]],list(data)) + res[[i]] 
+    vir[[i]] = predict(lr[[i]],list(data)) + res[[i]] 
   }
   
   data_perm = data.frame(vir[[1]])
-  for(i in ind_test){
-    data_perm[,i]=vir[[i]]  
+  for(i in 1:length(ind_test)){ # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
+    data_perm[,i]=vir[[i]]
   }
   suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
-  gaussCItest_td(1, 2, 3:length(ind_test), suffStat_perm)
+  if(length(ind_test)>2){
+    gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)  
+  }
+  else{
+    gaussCItest(1, 2,c(), suffStat_perm)
+  }
+  
+  
 }
 
 DRWCItest <- function(x, y, S, suffStat){
@@ -304,12 +311,28 @@ test_wise_deletion <-function(var_ind, data){
   return(data[not_del_ind,])
 }
 
-get_prt_m_xys<-function(ind, prt_m){
-  
+get_prt_m_xys<-function(ind, suffStat){
+  w = c()
+  for(i in ind){
+    if(is.in_prt_m(i, suffStat$prt_m)){
+      prt_i <- get_prt_i(i, suffStat)
+      w = c(w, prt_i)  
+    }
+  }
+  w
 }
 
 perm <- function(W, data){
-  
+  data <- test_wise_deletion(W,data)
+  len = length(data[,1])
+  ind_p <- sample(1:len)
+  data = data[ind_p,]
+  data_permw <- data[,W]
+  data.frame(data_permw)
+}
+
+is.in_prt_m<-function(i, prt_m){
+  sum(prt_m['m'] == i) > 0
 }
 #****************** Missing Value PC (MVPC) ******************
 
