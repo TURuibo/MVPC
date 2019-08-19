@@ -168,6 +168,7 @@ gaussCItest_td <- function(x, y, S, suffStat) {
 PermCCItest <- function(x, y, S, suffStat){
   ## The Z <- XY; Rz <- XY is not included in the test 
   ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
   W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
   ind_permc <- c(x, y, S, W)
   ind_test <- c(x, y, S)
@@ -177,9 +178,9 @@ PermCCItest <- function(x, y, S, suffStat){
   xnam <- paste0("data[,", (length(ind_test)+1):length(ind_permc),"]")
   lr <- list()
   res <- list()
-  for( i in ind_test){
+  for( i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
     fmla <- as.formula(paste("data[,", i,"] ~ 0 + ", paste(xnam, collapse= "+"),""))
-    lr[[i]] <- lm(formula = fmla, data = data)  # the ith block of list is ...
+    lr[[i]] <- lm(formula = fmla, data = data.frame(data))  # the ith block of list is ...
     res[[i]] <- residuals(lr[[i]])  # residuals
   }
   
@@ -188,11 +189,14 @@ PermCCItest <- function(x, y, S, suffStat){
   #         b) Row-based/ sample based Shuffle the index of W data points
   #         c) the same number of test-wise deletion CI Test 
   data_W_p = perm(W, suffStat$data)
-  data[,(length(ind_test)+1):length(ind_permc)] = data_W_p[1:length(data[,1]),]
+  for(i in (length(ind_test)+1):length(ind_permc)){
+    data[, i] = data_W_p[1:length(data[,1]),i-length(ind_test)]  
+  }
+  
   
   ## Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
   vir <- list()
-  for(i in ind_test){
+  for(i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
     vir[[i]] = predict(lr[[i]],list(data)) + res[[i]] 
   }
   
@@ -334,9 +338,25 @@ perm <- function(W, data){
 is.in_prt_m<-function(i, prt_m){
   sum(prt_m['m'] == i) > 0
 }
+
+cond.PermC<-function(x, y, S, suffStat){
+  ind <- c(x,y,S)
+  cond <- FALSE
+  if(length(intersect(ind, suffStat$prt_m$m)) > 0){  # 1) xyS have missingness indicator 
+    if(common.neighbor(x,y,suffStat$skel)){  # 2) x and y have common child
+      cond <- TRUE
+    }
+  }
+  return(cond)
+}
+
+common.neighbor <- function(x,y,skel){
+  skel <-as(skel,"matrix")
+  sum((skel[,x]==1) & (skel[,y]==1)) > 0  # share the neighbor
+}
 #****************** Missing Value PC (MVPC) ******************
 
-mvpc<-function(suffStat, indepTest, alpha, labels, p,
+mvpc<-function(suffStat, indepTest,corrMethod, alpha, labels, p,
                fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
                u2pd = c("relaxed", "rand", "retry"),
                skel.method = c("stable", "original", "stable.fast"),
@@ -392,7 +412,7 @@ mvpc<-function(suffStat, indepTest, alpha, labels, p,
   fixedGaps <- graph2gaps(skel)
 
   # b) Correction of the extra edges
-  skel <- skeleton(suffStat, indepTest, alpha, labels = labels,
+  skel <- skeleton(suffStat, corrMethod, alpha, labels = labels,
                    method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
                    NAdelete = NAdelete, m.max = m.max, numCores = numCores,
                    verbose = verbose)

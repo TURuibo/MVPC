@@ -9,8 +9,8 @@ source(paste(src_path,'/all_functions.R',sep=""))
 # ********* Synthethic data generation ********* 
 
 num_var = 20
-num_sample = 100
-rdm_seed = 1
+num_sample = 1000
+rdm_seed = 10
 
 gen_result_list<-gen_data(num_var,num_sample,"mnar",rdm_seed)
 
@@ -28,6 +28,12 @@ cat("Number of colliders that are parents of missingness inidcators: ", length(i
 # ********* MVPC *********
 
 suffStat_m <- list(data=data_m)
-res_mvpc<-mvpc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
+res_mvpc<-mvpc(suffStat_m, gaussCItest_td,PermCCItest, alpha=0.01, p=num_var)
 res_pc<-pc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
 
+suffStat  = list(C = cor(data_ref),n=num_sample)
+res_com_pc<-pc(suffStat, gaussCItest, alpha=0.01, p=num_var)
+
+shd(res_pc,myCPDAG)
+shd(res_com_pc,myCPDAG)
+shd(res_mvpc,myCPDAG)
