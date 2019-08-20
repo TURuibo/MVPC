@@ -134,17 +134,18 @@ detect_colliders <- function(myDAG){
 
 
 #****************** (Conditional) Independence Test ****************** 
+binPermCCItest<- function(x, y, S, suffStat){  # This is undergoing. Not done in theory.
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
+  }  
 
+binDRWCItest<- function(x, y, S, suffStat){  # This is undergoing. Done in theory. Not done in implement.
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
+}  
 
 binCItest_td <- function(x, y, S, suffStat){
   data = test_wise_deletion(c(x,y,S),suffStat$dm)
   suffStat$dm = data
   binCItest(x, y, S, suffStat)
-}
-
-DRWbinCItest <- function(x, y, S, suffStat){
-  
-  
 }
 
 gaussCItest_td <- function(x, y, S, suffStat) {
@@ -218,37 +219,35 @@ PermCCItest <- function(x, y, S, suffStat){
 DRWCItest <- function(x, y, S, suffStat){
   
   # Determine whether the current case satisfies the condition of correction
-  if(! iscorr(x, y, S, suffStat)){
-    gaussCItest_td(x, y, S, suffStat)
-  }
-  else{
-    # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
-    # Note that data for training the logistic regression are different with the data used for computing weights.
-    ind_r_xys <- get_ind_r_xys(x, y, S, suffStat)
-    ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
-    weights = sum(ind)/length(ind)  # "ri = 0" means missing value
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  
+  # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
+  # Note that data for training the logistic regression are different with the data used for computing weights.
+  ind_r_xys <- get_ind_r_xys(x, y, S, suffStat)
+  ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
+  weights = sum(ind)/length(ind)  # "ri = 0" means missing value
+  
+  for(ind_ri in ind_r_xys){
+    logidata <- get_logidata(ind_ri,  suffStat)
+    fmla <- get_logi_formula(length(logidata))
+    logi.fit <- glm(formula = as.formula(fmla), data = logidata, family = binomial)
     
-    for(ind_ri in ind_r_xys){
-      logidata <- get_logidata(ind_ri,  suffStat)
-      fmla <- get_logi_formula(length(logidata))
-      logi.fit <- glm(formula = as.formula(fmla), data = logidata, family = binomial)
-      
-      prt_i <- get_prt_i(ind_ri, suffStat)
-      
-      logidata = data.frame(r = 1:length(sum(ind)), prt = suffStat$data[ind,prt_i])
-      logi.prob = predict(logi.fit, logidata, type = "response")  
-      # TODO: check what if the name of the column is different with the formula
-      # it should have the same name with the formula
-      # it follow the formula slicing way when input the same name with formula
-      weights = weights * (1/logi.prob)
-    }
+    prt_i <- get_prt_i(ind_ri, suffStat)
     
-    # Weighted the correlation
-    data_td <- suffStat$data[ind,]
-    suffStat_drw  = list(C=wtd.cors(data_td,data_td,weights), n=length(weights))
-    gaussCItest(x, y, S, suffStat_drw)
+    logidata = data.frame(r = 1:length(sum(ind)), prt = suffStat$data[ind,prt_i])
+    logi.prob = predict(logi.fit, logidata, type = "response")  
+    # TODO: check what if the name of the column is different with the formula
+    # it should have the same name with the formula
+    # it follow the formula slicing way when input the same name with formula
+    weights = weights * (1/logi.prob)
   }
-}
+  
+  # Weighted the correlation
+  data_td <- suffStat$data[ind,]
+  suffStat_drw  = list(C=wtd.cors(data_td,data_td,weights), n=length(weights))
+  gaussCItest(x, y, S, suffStat_drw)
+  
+}  # Logistic regression is not general enough for estimate the ratio, thus waiting for density ratio estimate
 
 iscorr<- function(x, y, S, suffStat){
   return(TRUE)
@@ -354,6 +353,8 @@ common.neighbor <- function(x,y,skel){
   skel <-as(skel,"matrix")
   sum((skel[,x]==1) & (skel[,y]==1)) > 0  # share the neighbor
 }
+
+
 ## ****************** Missing Value PC (MVPC) ******************
 # Due to the pMax and sepset we have to change something inside
 

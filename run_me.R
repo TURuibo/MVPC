@@ -28,10 +28,10 @@ cat("Number of colliders that are parents of missingness inidcators: ", length(i
 # ********* MVPC *********
 
 suffStat_m <- list(data=data_m)
+suffStat  = list(C = cor(data_ref),n=num_sample)
+
 res_mvpc<-mvpc(suffStat_m, gaussCItest_td,PermCCItest, alpha=0.01, p=num_var)
 res_pc<-pc(suffStat_m, gaussCItest_td, alpha=0.01, p=num_var)
-
-suffStat  = list(C = cor(data_ref),n=num_sample)
 res_com_pc<-pc(suffStat, gaussCItest, alpha=0.01, p=num_var)
 
 shd(res_pc,myCPDAG)
