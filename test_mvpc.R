@@ -6,9 +6,9 @@ data_path<-paste(proj_path,'/data',sep="")
 
 source(paste(src_path,'/all_functions.R',sep=""))
 
-exp_10000 <- comp_com_td_mvpc(10000, "mnar_cor")
-exp_1000 <-comp_com_td_mvpc(1000,"mnar_cor")
-exp_100 <-comp_com_td_mvpc(100,"mnar_cor")
+exp_10000 <- comp_com_td_mvpc(n=10000, "mnar_cor")
+exp_1000 <-comp_com_td_mvpc(n=1000,"mnar_cor")
+exp_100 <-comp_com_td_mvpc(n=100,"mnar_cor")
 
 result<-list(exp_100,exp_1000,exp_10000)
 
