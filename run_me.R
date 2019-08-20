@@ -1,5 +1,5 @@
 # The path of "R-proj"
-proj_path<-'/Users/ruibo/Desktop/mvpc/mvpc_v2/MVPC'
+proj_path<-getwd()
 src_path<-paste(proj_path,'/src',sep="")
 res_path<-paste(proj_path,'/result',sep="")
 data_path<-paste(proj_path,'/data',sep="")
