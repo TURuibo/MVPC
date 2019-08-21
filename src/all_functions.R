@@ -134,11 +134,11 @@ detect_colliders <- function(myDAG){
 
 
 #****************** (Conditional) Independence Test ****************** 
-binPermCCItest<- function(x, y, S, suffStat){  # This is undergoing. Not done in theory.
+binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and the test pass.
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
   }  
 
-binDRWCItest<- function(x, y, S, suffStat){  # This is undergoing. Done in theory. Not done in implement.
+binDRWCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and the test pass.
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
 }  
 
