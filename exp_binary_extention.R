@@ -73,6 +73,13 @@ binCItest_td(1,2,c(3), suffStat)
 binPermCCItest(1,2,c(3), suffStat)
 
 ## Successful: DRW correction method works for two variables case 
+
+x <- rbinom(n, 1, pr=1/2)
+y <- rbinom(n, 1, pr=1/2)
+pw <- plogis( x + y); w <- rbinom(n, 1, prob = pw) # {0,1}
+pr <- plogis( 2*w-1); xr <- rbinom(n, 1, prob = pr)
+
+
 pr0 = sum(xr == 0)/ length(xr)
 pr0w0 = sum(xr == 0 & w==0)/sum( w==0 )
 pr0w1 = sum(xr == 0 & w==1)/sum( w==1 )

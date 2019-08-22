@@ -19,3 +19,4 @@ res_pc<-pc(suffStat_m, binCItest_td, alpha=0.01, p=num_var)
 
 res_mvpc<-mvpc(suffStat_m, binCItest_td, binPermCCItest, alpha=0.01, p=num_var)
 
+gSquareDis()
