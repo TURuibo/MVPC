@@ -7,7 +7,7 @@ res_path<-paste(proj_path,'/result',sep="")
 data_path<-paste(proj_path,'/data',sep="")
 source(paste(src_path,'/all_functions.R',sep=""))
 
-## Simulate *independent data of {0,1}-variables:
+## Data generation
 n <- 1000000
 set.seed(123)
 
@@ -30,7 +30,6 @@ xr= xr_[xr_==0]
 
 ## Test-wise deletion doesn't work 
 dat = cbind(x,y,z)
-# binCItest(1,2,c(), list(dm = dat, adaptDF = FALSE)) # 0.36, not signif.
 binCItest_td(1,2,c(3), list(data = dat, adaptDF = FALSE))
 
 ## Permutation-based Correction Method works
@@ -69,11 +68,9 @@ prt[[1]]=c(4)
 prt_m<-data.frame(m=m)
 prt_m[['prt']]<-prt
 
-suffStat = list(data = data , prt_m = prt_m, adaptDF = FALSE)
+suffStat = list(data = data , prt_m = prt_m)
 binCItest_td(1,2,c(3), suffStat)
 binPermCCItest(1,2,c(3), suffStat)
-
-
 
 ## Successful: DRW correction method works for two variables case 
 pr0 = sum(xr == 0)/ length(xr)
@@ -88,7 +85,6 @@ Data.xtabs0 = c0 * xtabs( ~ x[w==0]+ y[w==0])
 Data.xtabs1 = c1 * xtabs( ~ x[w==1]+ y[w==1])
 Data.xtabs = Data.xtabs0  + Data.xtabs1
 GTest(Data.xtabs,correct="none")            # "none" "williams" "yates"
-
 
 ##  Permutation-based method does not work
 # step 1: get generative model
@@ -110,4 +106,3 @@ y_c <- rbinom(length(x), 1, prob = p_yc) # {0,1}
 
 dat <- cbind(x_c, y_c,w)
 binCItest(1,2,c(), list(dm = dat , adaptDF = FALSE))
-

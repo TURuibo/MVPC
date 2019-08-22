@@ -135,14 +135,13 @@ detect_colliders <- function(myDAG){
 
 
 #****************** (Conditional) Independence Test ****************** 
-binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and the test pass.
-  # if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
+binPermCCItest<- function(x, y, S, suffStat){  
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
   ind_test <- c(x, y, S)
   ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
   ind_permc <- c(ind_test, ind_W)  
   
   ## Step 1: Get CPD given W = 0 and W = 1 
-
   data <- test_wise_deletion(ind_permc, suffStat$data)
   data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
   num.td <- length(data[,1])
@@ -162,16 +161,8 @@ binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and 
     cor.xy.wi <- cor(dat.wi)
     p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
   }
-  ## Step 2:n Shuffle W 
-  # data.W <- test_wise_deletion(ind_W, suffStat$data)
-  # nrow.td.W <- length(data.W[,1])
-  # data.W <- data[,ind_W] # get full W
-  # data.W <- matrix(data = data.W, nrow = nrow.td.W)
   
-  # ind <- 1:nrow.td.W
-  # ind.perm.w <- sample(ind)[1:num.td]
-  # data.W.perm <- data.W[ind.perm.w,]
-  
+  ## Step 2: Shuffle W 
   data.W <- test_wise_deletion(ind_W, suffStat$data)
   nrow.td.W <- length(data.W[,1])
   data.W <- matrix(data = data.W[,ind_W], nrow = nrow.td.W)
@@ -180,8 +171,8 @@ binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and 
   ind.perm.w <- sample(ind)[1:num.td]
   data.W.perm <- data.W[ind.perm.w,]
   data.W.perm <- matrix(data = data.W.perm, nrow = num.td)
-  ## Generate virtual data of x,y, and S
   
+  ## Step 3: Generate virtual data of x,y, and S
   for(i in 1:n.comb.W){
     ind.mask <- comb.W[i, ] == data.W.perm
     ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]))
@@ -194,7 +185,7 @@ binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and 
     }
   }
 
-  ## Test with the virtual data set
+  ## Step4: Test with the virtual data set
   if(length(S) > 0){binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))}
   else{binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))}
 }  
@@ -399,12 +390,16 @@ is.in_prt_m<-function(i, prt_m){
 cond.PermC<-function(x, y, S, suffStat){
   ind <- c(x,y,S)
   cond <- FALSE
-  if(length(intersect(ind, suffStat$prt_m$m)) > 0){  # 1) xyS have missingness indicator 
-    if(common.neighbor(x,y,suffStat$skel)){  # 2) x and y have common child
-      cond <- TRUE
+  if("skel" %in% names(suffStat)){
+    if(length(intersect(ind, suffStat$prt_m$m)) > 0){  # 1) xyS have missingness indicator 
+      if(common.neighbor(x,y,suffStat$skel)){  # 2) x and y have common child
+        cond <- TRUE
+      }
     }
+    return(cond)
+  }else{
+    return(TRUE)  # 1. if there is skel, we can avoid unnecessary test; else we just do correction.
   }
-  return(cond)
 }
 
 common.neighbor <- function(x,y,skel){
