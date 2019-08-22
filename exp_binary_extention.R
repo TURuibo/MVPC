@@ -14,8 +14,8 @@ set.seed(123)
 x_ <- rbinom(n, 1, pr=1/2)
 pz_ <- plogis( 2*x_-1); z_ <- rbinom(n, 1, pr=pz_)
 py_ <- plogis( 2*z_-1); y_ <- rbinom(n, 1, pr=py_)
-
 dat <- cbind(x_,y_,z_)
+
 binCItest(1,2,c(3), list(dm = dat, adaptDF = FALSE)) # 0.36, not signif.
 
 # Add missingness mechanism
@@ -30,7 +30,8 @@ xr= xr_[xr_==0]
 
 ## Test-wise deletion doesn't work 
 dat = cbind(x,y,z)
-binCItest_td(1,2,c(3), list(dm = dat, adaptDF = FALSE))
+# binCItest(1,2,c(), list(dm = dat, adaptDF = FALSE)) # 0.36, not signif.
+binCItest_td(1,2,c(3), list(data = dat, adaptDF = FALSE))
 
 ## Permutation-based Correction Method works
 dat <- cbind(x, y, z)
@@ -46,12 +47,32 @@ p.xy.w1 <- apply(dat_w1 ,2, function(x) sum(x)/length(x))
 cor.xy.w1 <- cor(dat_w1 )
 p.joint.w1 <- ObtainMultBinaryDist(corr = cor.xy.w1, marg.probs = p.xy.w1)
 
-
 w = sample(w_)[1:length(x)]
 data_w0 <- RMultBinary(n = sum(w==0), mult.bin.dist = p.joint.w0)$binary.sequences
 data_w1 <- RMultBinary(n = sum(w==1), mult.bin.dist = p.joint.w1)$binary.sequences
 dat <- rbind(data_w0,data_w1 )
 binCItest(1,2,c(3), list(dm = dat , adaptDF = FALSE))
+
+## Permutation-based Correction Test works
+x = x_
+y = y_
+z = z_
+w = w_
+
+x[xr_==1] = NA
+data = cbind(x,y,z,w)
+
+prt = list()
+m = c(1)
+prt[[1]]=c(4)
+
+prt_m<-data.frame(m=m)
+prt_m[['prt']]<-prt
+
+suffStat = list(data = data , prt_m = prt_m, adaptDF = FALSE)
+binCItest_td(1,2,c(3), suffStat)
+binPermCCItest(1,2,c(3), suffStat)
+
 
 
 ## Successful: DRW correction method works for two variables case 

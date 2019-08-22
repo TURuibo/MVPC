@@ -2,6 +2,7 @@ library(pcalg)
 library(mvtnorm)
 library(weights)
 library(ks)
+library(e1071)  # For generating all combinations of a binary vector
 
 
 #******************Functions for Synthetic Data Generation******************
@@ -135,17 +136,76 @@ detect_colliders <- function(myDAG){
 
 #****************** (Conditional) Independence Test ****************** 
 binPermCCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and the test pass.
-  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
-  }  
+  # if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
+  ind_test <- c(x, y, S)
+  ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+  ind_permc <- c(ind_test, ind_W)  
+  
+  ## Step 1: Get CPD given W = 0 and W = 1 
+
+  data <- test_wise_deletion(ind_permc, suffStat$data)
+  data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
+  num.td <- length(data[,1])
+  num.W <- length(ind_W)
+  comb.W <- bincombinations(length(ind_W))
+  
+  dm <- dim(comb.W)
+  n.comb.W <- dm[1]
+  
+  p.joint.w <- list()
+  for(i in 1:n.comb.W){
+    ind.mask <- comb.W[i, ] == data[,(length(ind_test)+1):length(ind_permc)]
+    ind.mask <- matrix(data = ind.mask, nrow = length(data[,1]))
+    ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+    dat.wi <- data[ind_wi, 1:length(ind_test)]
+    p.xy.wi <- apply(dat.wi,2, function(x) sum(x)/length(x))
+    cor.xy.wi <- cor(dat.wi)
+    p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
+  }
+  ## Step 2:n Shuffle W 
+  # data.W <- test_wise_deletion(ind_W, suffStat$data)
+  # nrow.td.W <- length(data.W[,1])
+  # data.W <- data[,ind_W] # get full W
+  # data.W <- matrix(data = data.W, nrow = nrow.td.W)
+  
+  # ind <- 1:nrow.td.W
+  # ind.perm.w <- sample(ind)[1:num.td]
+  # data.W.perm <- data.W[ind.perm.w,]
+  
+  data.W <- test_wise_deletion(ind_W, suffStat$data)
+  nrow.td.W <- length(data.W[,1])
+  data.W <- matrix(data = data.W[,ind_W], nrow = nrow.td.W)
+  
+  ind <- 1:nrow.td.W
+  ind.perm.w <- sample(ind)[1:num.td]
+  data.W.perm <- data.W[ind.perm.w,]
+  data.W.perm <- matrix(data = data.W.perm, nrow = num.td)
+  ## Generate virtual data of x,y, and S
+  
+  for(i in 1:n.comb.W){
+    ind.mask <- comb.W[i, ] == data.W.perm
+    ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]))
+    ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+    
+    if(i==1){
+      data.vir <- RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  
+    }else{
+      data.vir <- rbind(data.vir, RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  )
+    }
+  }
+
+  ## Test with the virtual data set
+  if(length(S) > 0){binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))}
+  else{binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))}
+}  
 
 binDRWCItest<- function(x, y, S, suffStat){  # Undergoing: Done in theory and the test pass.
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
 }  
 
 binCItest_td <- function(x, y, S, suffStat){
-  data = test_wise_deletion(c(x,y,S),suffStat$dm)
-  suffStat$dm = data
-  binCItest(x, y, S, suffStat)
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  binCItest(x, y, S, list(dm = data, adaptDF = FALSE))
 }
 
 gaussCItest_td <- function(x, y, S, suffStat) {
@@ -170,8 +230,8 @@ PermCCItest <- function(x, y, S, suffStat){
   ## The Z <- XY; Rz <- XY is not included in the test 
   ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
   if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
-  W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
-  ind_permc <- c(x, y, S, W)
+  ind_W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+  ind_permc <- c(x, y, S, ind_W)
   ind_test <- c(x, y, S)
   data <- test_wise_deletion(ind_permc, suffStat$data)
   data <- data[,ind_permc]
@@ -189,7 +249,7 @@ PermCCItest <- function(x, y, S, suffStat){
   #         a) Remove the missing entries of dat[, W]
   #         b) Row-based/ sample based Shuffle the index of W data points
   #         c) the same number of test-wise deletion CI Test 
-  data_W_p = perm(W, suffStat$data)
+  data_W_p = perm(ind_W, suffStat$data)
   for(i in (length(ind_test)+1):length(ind_permc)){
     data[, i] = data_W_p[1:length(data[,1]),i-length(ind_test)]  
   }
@@ -212,8 +272,6 @@ PermCCItest <- function(x, y, S, suffStat){
   else{
     gaussCItest(1, 2,c(), suffStat_perm)
   }
-  
-  
 }
 
 DRWCItest <- function(x, y, S, suffStat){
