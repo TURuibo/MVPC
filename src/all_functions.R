@@ -133,6 +133,25 @@ detect_colliders <- function(myDAG){
 # Example of generating synthetic data
 # gen_data(20,10,"mnar")
 
+load_bin_data<-function(fdata){
+  read.table(fdata, header=TRUE, sep="\t", stringsAsFactors = FALSE) 
+}
+
+load_bin_graph<-function(graph.file){
+  res <- readLines(graph.file)
+  num.var <- length(strsplit(res[2], ",")[[1]])
+  graph <- matrix(0L, nrow = num.var, ncol = num.var)
+  for(row in res){
+    if(grepl("->", row, fixed=TRUE)){
+      itms <- strsplit(row, " ")[[1]]
+      cause = as.integer(gsub("[^0-9.]", "",  itms[2]))
+      effect = as.integer(gsub("[^0-9.]", "",  itms[4]))
+      graph[cause,effect] = 1
+    }
+  }
+  DAG <- as(graph,'graphNEL')
+  dag2cpdag(DAG)
+}
 
 #****************** (Conditional) Independence Test ****************** 
 binPermCCItest<- function(x, y, S, suffStat){  
