@@ -4,7 +4,8 @@ library(weights)
 library(ks)
 library(e1071)  # For generating all combinations of a binary vector
 
-
+library(DescTools)
+library(mipfp)
 #******************Functions for Synthetic Data Generation******************
 
 gen_data <- function(p,n,mode='mar',seed=1000){
@@ -130,6 +131,55 @@ detect_colliders <- function(myDAG){
   x[ind]
 }
 
+detect_colliders_prt <- function(DAG, cldr){
+  m <- as(DAG,"matrix")
+  a = 1:length(m[,1])
+  cldr_prt = list()
+  count = 1
+  for(i in cldr){
+    cldr_prt[[count]]=a[m[,i]==1]
+    count = count + 1 
+  }
+  cldr_prt
+}
+
+create_m_ind <- function(cldr,cldr_prt){
+  prt_ms = c()
+  ms = c()
+  count = 1
+  
+  for(i in 1:length(cldr)){
+    for(pr in cldr_prt[[i]]){
+      if(length(ms) > 1 && pr %in% ms){ }
+      else{
+        ms[count] = pr
+        prt_ms[count] = cldr[i]
+        count = count + 1
+        break
+      }
+    }
+  }
+  
+  if(count > 4){
+    count = 4
+  }
+  
+  left_ind = setdiff(1:20, ms)
+  left_ind = setdiff(left_ind, cldr)
+  left_ind = sample(left_ind)
+  for(i in 1:floor(length(left_ind)/2)){
+    ms[count] = left_ind[i]
+    prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
+    count = count + 1
+  }
+  ms_ = ms[1:3]
+  prt_ms_=prt_ms[1:3]
+  ind = sample(4:length(ms))
+  ms_[4:6] = ms[ind[1:3]]
+  prt_ms_[4:6]=prt_ms[ind[1:3]]
+  return(list(ms = ms_,prt_ms=prt_ms_))  
+}
+
 # Example of generating synthetic data
 # gen_data(20,10,"mnar")
 
@@ -150,72 +200,454 @@ load_bin_graph<-function(graph.file){
     }
   }
   DAG <- as(graph,'graphNEL')
-  dag2cpdag(DAG)
 }
 
 #****************** (Conditional) Independence Test ****************** 
-binPermCCItest<- function(x, y, S, suffStat){  
+binCItest.permc<- function(x, y, S, suffStat){  
+  # print(c(x,y,S))
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
-  ind_test <- c(x, y, S)
-  ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
-  ind_permc <- c(ind_test, ind_W)  
-  
-  ## Step 1: Get CPD given W = 0 and W = 1 
-  data <- test_wise_deletion(ind_permc, suffStat$data)
-  data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
-  num.td <- length(data[,1])
-  num.W <- length(ind_W)
-  comb.W <- bincombinations(length(ind_W))
-  
-  dm <- dim(comb.W)
-  n.comb.W <- dm[1]
-  
-  p.joint.w <- list()
-  for(i in 1:n.comb.W){
-    ind.mask <- comb.W[i, ] == data[,(length(ind_test)+1):length(ind_permc)]
-    ind.mask <- matrix(data = ind.mask, nrow = length(data[,1]))
-    ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
-    dat.wi <- data[ind_wi, 1:length(ind_test)]
-    p.xy.wi <- apply(dat.wi,2, function(x) sum(x)/length(x))
-    cor.xy.wi <- cor(dat.wi)
-    p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
-  }
-  
-  ## Step 2: Shuffle W 
-  data.W <- test_wise_deletion(ind_W, suffStat$data)
-  nrow.td.W <- length(data.W[,1])
-  data.W <- matrix(data = data.W[,ind_W], nrow = nrow.td.W)
-  
-  ind <- 1:nrow.td.W
-  ind.perm.w <- sample(ind)[1:num.td]
-  data.W.perm <- data.W[ind.perm.w,]
-  data.W.perm <- matrix(data = data.W.perm, nrow = num.td)
-  
-  ## Step 3: Generate virtual data of x,y, and S
-  for(i in 1:n.comb.W){
-    ind.mask <- comb.W[i, ] == data.W.perm
-    ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]))
-    ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+  tryCatch(
+    {
+      ind_test <- c(x, y, S)
+      ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+      ind_W <- setdiff(ind_W,ind_test)
+      if(length(ind_W)==0){return(binCItest_td(x,y,S,suffStat))}
+      ind_permc <- c(ind_test, ind_W)  
+      
+      ## Step 1: Get CPD given W = 0 and W = 1 
+      data <- test_wise_deletion(ind_permc, suffStat$data)
+      data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
+      num.td <- length(data[,1])
+      num.W <- length(ind_W)
+      comb.W <- bincombinations(length(ind_W))
+      
+      dm <- dim(comb.W)
+      n.comb.W <- dm[1]
+      
+      p.joint.w <- list()
+      for(i in 1:n.comb.W){
+        ind.mask <- comb.W[i, ] == data[,(length(ind_test)+1):length(ind_permc)]
+        ind.mask <- matrix(data = ind.mask, nrow = length(data[,1]))
+        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+        dat.wi <- data[ind_wi, 1:length(ind_test)]
+        p.xy.wi <- apply(dat.wi,2, function(x) sum(x)/length(x))
+        cor.xy.wi <- cor(dat.wi)
+        p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
+      }
+      
+      ## Step 2: Shuffle W 
+      data.W <- test_wise_deletion(ind_W, suffStat$data)
+      nrow.td.W <- length(data.W[,1])
+      data.W <- data.W[,ind_W]
+      if(length(ind_W)==1){
+        data.W <- matrix(data = data.W, nrow = nrow.td.W,byrow = TRUE)  
+      }
+      
+      ind <- 1:nrow.td.W
+      ind.perm.w <- sample(ind)[1:num.td]
+      data.W.perm <- data.W[ind.perm.w,]
+      if(length(ind_W)==1){data.W.perm <- matrix(data = data.W.perm, nrow = num.td,byrow = TRUE)}
+      
+      ## Step 3: Generate virtual data of x,y, and S
+      for(i in 1:n.comb.W){
+        ind.mask <- comb.W[i, ] == data.W.perm
+        if(length(ind_W)==1){ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]),byrow = TRUE)}
+        
+        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+        
+        if(i==1){
+          data.vir <- RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  
+        }else{
+          data.vir <- rbind(data.vir, RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  )
+        }
+      }
+      
+      ## Step4: Test with the virtual data set
+      if(length(S) > 0){binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))}
+      else{binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))}
+    },
+    error=function(cond) {
+      message(cond)
+      # Choose a return value in case of error
+      return(binCItest_td(x,y,S,suffStat))
+    })
     
-    if(i==1){
-      data.vir <- RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  
-    }else{
-      data.vir <- rbind(data.vir, RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  )
-    }
-  }
-
-  ## Step4: Test with the virtual data set
-  if(length(S) > 0){binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))}
-  else{binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))}
 }  
 
-binDRWCItest<- function(x, y, S, suffStat){ 
-  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
-}    # Undergoing: Done in theory and the test pass.
+binCItest.drw <- function(x, y, S, suffStat){
+  weights_ = compute_weights(x, y, S, suffStat)
+  test_ind = c(x,y,S)
+  del_res = test_wise_deletion_w(test_ind,suffStat$data, weights_)
+  
+  data = del_res$data
+  weights = del_res$weights
+  if(length(S)>0){
+    binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  else{
+    binCItest_w(1, 2, c(),weights, list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  
+}
+
+binCItest_td_ref<- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+}
 
 binCItest_td <- function(x, y, S, suffStat){
-  data = test_wise_deletion(c(x,y,S),suffStat$data)
-  binCItest(x, y, S, list(dm = data, adaptDF = FALSE))
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  # sample_size <<- c(sample_size,length(data[,1]))
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  
+}
+
+f_R<-function(r,suffStat){
+  n.sample = dim(suffStat$data)[1]
+  if(length(r) > 1){
+    R = suffStat$data[,r]
+  }
+  else{R = matrix(data = suffStat$data[,r], nrow = n.sample) # BUG: here , only get one column
+  }
+  R = is.na(R) * 1
+  return(sum(rowSums(R)==0)/n.sample)
+}
+
+f_weights<-function(ri, pa, pval, suffStat){
+  data = suffStat$data[,pa]
+  ri = is.na(suffStat$data[,ri]) * 1
+  dat_r = cbind(ri,data)
+  n.var = dim(dat_r)[2]
+  dat_r = test_wise_deletion(1:n.var, dat_r)
+  return(sum(dat_r[,1] == 0 & dat_r[,2:n.var]==pval)/sum( dat_r[,2:n.var]==pval ))
+}
+
+get_rw_pair<-function(x,y,S,ind_W,suffStat){
+  rw <- list(r=c(),w=list())
+  
+  count = 1
+  for(ri in c(x,y,S,ind_W)){
+    wi <- get_prt_m_xys(ri, suffStat)
+    if(length(wi)!=0){
+      rw$r[count] = ri
+      rw$w[[count]] = wi
+      count = count + 1
+    }
+  }
+  rw
+}
+
+weights_check_table<-function(rw,suffStat,indW, comb.W){
+  weights_tab = c()
+  pR <- f_R(rw$r,suffStat)
+  n.comb.W <- dim(comb.W)[1]
+  for(i in 1:n.comb.W){
+    weighti = pR
+    for(count in 1:length(rw$r)){
+      ri = rw$r[count]
+      wi =rw$w[[count]]
+      pos_wi = (wi == indW) %*% 1:length(indW)
+      val_wi = comb.W[i, pos_wi]
+      weighti = weighti / f_weights(ri, wi, val_wi, suffStat)
+    }
+    weights_tab = c(weights_tab, weighti)
+  }
+  weights_tab
+}
+
+compute_weights<- function(x, y, S, suffStat){
+  data = suffStat$data
+  n.sample = dim(data)[1]
+  weights = rep(1, n.sample)
+  
+  # Detection of parents of missingness indicators
+  ind_test <- c(x, y, S)
+  ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
+  if(length(ind_W)==0){return(weights)}
+  
+  checkW <- ind_W
+  while(length(pa_W <- get_prt_m_xys(checkW, suffStat)) > 0){
+    ind_W <- c(ind_W, pa_W) # Get parents the W missingness indicators
+    checkW = pa_W
+  } 
+  ind_W <- unique(ind_W)
+  # Get ri and corresponding wi
+  rw = get_rw_pair(x,y,S,ind_W,suffStat)
+  # Get the weights check table weights <==> W
+  num.W <- length(ind_W)
+  comb.W <- bincombinations(length(ind_W))
+  weights_tab = weights_check_table(rw,suffStat,ind_W,comb.W)
+  # apply the weights check table to assigning weights for each data point
+  if(length(ind_W)>1 ){
+    W = data[,ind_W]
+  }
+  else{
+    W = matrix(data = data[,ind_W], nrow = n.sample)  
+  }
+  
+  for(i in 1: dim(comb.W)[1]){
+    ind = rep(TRUE, n.sample)
+    for(j in 1:dim(comb.W)[2]){
+      ind = (W[,j] == comb.W[i,j]) & ind
+    }
+    weights[ind] =  weights_tab[i] 
+  }
+  return(weights)
+}
+
+binCItest_w <- function (x, y, S, weights, suffStat)
+{
+  if (is.data.frame(dm <- suffStat$dm))
+    dm <- data.matrix(dm)
+  else stopifnot(is.matrix(dm))
+  adaptDF <- suffStat$adaptDF
+  gSquareBin_w(x = x, y = y, S = S, dm = dm, weights=weights, adaptDF = adaptDF,
+               verbose = FALSE)
+}
+
+gSquareBin_w <- function (x, y, S, dm, weights, adaptDF = FALSE, n.min = 10 * df, verbose = FALSE)
+{
+  stopifnot((n <- nrow(dm)) >= 1)
+  if (!all(as.logical(dm) == dm))
+    stop("'dm' must be binary, i.e. with values in {0,1}")
+  if (verbose)
+    cat("Edge ", x, "--", y, " with subset S =", S, "\n")
+  lenS <- length(S)
+  df <- 2^lenS
+  if (n < n.min) {
+    warning(gettextf("n=%d is too small (n < n.min = %d ) for G^2 test (=> treated as independence)",
+                     n, n.min), domain = NA)
+    return(1)
+  }
+  d.x1 <- dm[, x] + 1L
+  d.y1 <- dm[, y] + 1L
+  if (lenS <= 5) {
+    n12 <- 1:2
+    switch(lenS + 1L, {
+      nijk <- array(0L, c(2, 2))
+      for (i in n12) {
+        d.x.i <- d.x1 == i
+        for (j in n12) nijk[i, j] <- sum(weights[d.x.i & d.y1 ==j])
+      }
+      t.log <- n * (nijk/tcrossprod(rowSums(nijk), colSums(nijk)))
+    }, {
+      dmS.1 <- dm[, S] + 1L
+      nijk <- array(0L, c(2, 2, 2))
+      for (i in n12) {
+        d.x.i <- d.x1 == i
+        for (j in n12) {
+          d.x.i.y.j <- d.x.i & d.y1 == j
+          for (k in n12) nijk[i, j, k] <- sum(weights[d.x.i.y.j &
+                                                        dmS.1 == k])
+        }
+      }
+      alt <- c(x, y, S)
+      c <- which(alt == S)
+      nik <- apply(nijk, c, rowSums)
+      njk <- apply(nijk, c, colSums)
+      nk <- colSums(njk)
+      t.log <- array(0, c(2, 2, 2))
+      if (c == 3) {
+        for (k in n12) t.log[, , k] <- nijk[, , k] *
+            (nk[k]/tcrossprod(nik[, k], njk[, k]))
+      } else if (c == 1) {
+        for (k in n12) t.log[k, , ] <- nijk[k, , ] *
+            (nk[k]/tcrossprod(nik[, k], njk[, k]))
+      } else {
+        for (k in n12) t.log[, k, ] <- nijk[, k, ] *
+            (nk[k]/tcrossprod(nik[, k], njk[, k]))
+      }
+    }, {
+      dmS1.1 <- dm[, S[1]] + 1L
+      dmS2.1 <- dm[, S[2]] + 1L
+      nijk2 <- array(0L, c(2, 2, 2, 2))
+      for (i in n12) {
+        d.x.i <- d.x1 == i
+        for (j in n12) {
+          d.x.i.y.j <- d.x.i & d.y1 == j
+          for (k in n12) {
+            d.x.y.S1 <- d.x.i.y.j & dmS1.1 == k
+            for (l in n12) nijk2[i, j, k, l] <- sum(weights[d.x.y.S1 &
+                                                              dmS2.1 == l])
+          }
+        }
+      }
+      nijk <- array(0L, c(2, 2, 4))
+      for (i in n12) {
+        for (j in n12) nijk[, , 2 * (i - 1) + j] <- nijk2[,
+                                                          , i, j]
+      }
+      nik <- apply(nijk, 3, rowSums)
+      njk <- apply(nijk, 3, colSums)
+      nk <- colSums(njk)
+      t.log <- array(0, c(2, 2, 4))
+      for (k in 1:4) t.log[, , k] <- nijk[, , k] * (nk[k]/tcrossprod(nik[,
+                                                                         k], njk[, k]))
+    }, {
+      dmS1.1 <- dm[, S[1]] + 1L
+      dmS2.1 <- dm[, S[2]] + 1L
+      dmS3.1 <- dm[, S[3]] + 1L
+      nijk <- array(0L, c(2, 2, 8))
+      for (i1 in n12) {
+        d.x.i <- d.x1 == i1
+        for (i2 in n12) {
+          d.x.y.i12 <- d.x.i & d.y1 == i2
+          for (i3 in n12) {
+            d.x.y.S1 <- d.x.y.i12 & dmS1.1 == i3
+            for (i4 in n12) {
+              d.xy.S1S2 <- d.x.y.S1 & dmS2.1 == i4
+              for (i5 in n12) nijk[i1, i2, 4 * (i3 -
+                                                  1) + 2 * (i4 - 1) + i5] <- sum(weights[d.xy.S1S2 &
+                                                                                           dmS3.1 == i5])
+            }
+          }
+        }
+      }
+      nik <- apply(nijk, 3, rowSums)
+      njk <- apply(nijk, 3, colSums)
+      nk <- colSums(njk)
+      t.log <- array(0, c(2, 2, 8))
+      for (k in 1:8) t.log[, , k] <- nijk[, , k] * (nk[k]/tcrossprod(nik[,
+                                                                         k], njk[, k]))
+    }, {
+      dmS1.1 <- dm[, S[1]] + 1L
+      dmS2.1 <- dm[, S[2]] + 1L
+      dmS3.1 <- dm[, S[3]] + 1L
+      dmS4.1 <- dm[, S[4]] + 1L
+      nijk <- array(0L, c(2, 2, 16))
+      for (i1 in n12) {
+        d.x.i <- d.x1 == i1
+        for (i2 in n12) {
+          d.x.y.i12 <- d.x.i & d.y1 == i2
+          for (i3 in n12) {
+            d.x.y.S1 <- d.x.y.i12 & dmS1.1 == i3
+            for (i4 in n12) {
+              d.xy.S1S2 <- d.x.y.S1 & dmS2.1 == i4
+              for (i5 in n12) {
+                d.xy.S1S2S3 <- d.xy.S1S2 & dmS3.1 ==
+                  i5
+                for (i6 in n12) nijk[i1, i2, 8 * (i3 -
+                                                    1) + 4 * (i4 - 1) + 2 * (i5 - 1) +
+                                       i6] <- sum(weights[d.xy.S1S2S3 & dmS4.1 ==
+                                                            i6])
+              }
+            }
+          }
+        }
+      }
+      nik <- apply(nijk, 3, rowSums)
+      njk <- apply(nijk, 3, colSums)
+      nk <- colSums(njk)
+      t.log <- array(0, c(2, 2, 16))
+      for (k in 1:16) t.log[, , k] <- nijk[, , k] * (nk[k]/tcrossprod(nik[,
+                                                                          k], njk[, k]))
+    }, {
+      dmS1.1 <- dm[, S[1]] + 1L
+      dmS2.1 <- dm[, S[2]] + 1L
+      dmS3.1 <- dm[, S[3]] + 1L
+      dmS4.1 <- dm[, S[4]] + 1L
+      dmS5.1 <- dm[, S[5]] + 1L
+      nijk <- array(0L, c(2, 2, 32))
+      for (i1 in n12) {
+        d.x.i <- d.x1 == i1
+        for (i2 in n12) {
+          d.x.y.i12 <- d.x.i & d.y1 == i2
+          for (i3 in n12) {
+            d.x.y.S1 <- d.x.y.i12 & dmS1.1 == i3
+            for (i4 in n12) {
+              d.xy.S1S2 <- d.x.y.S1 & dmS2.1 == i4
+              for (i5 in n12) {
+                d.xy.S1S2S3 <- d.xy.S1S2 & dmS3.1 ==
+                  i5
+                for (i6 in n12) {
+                  d.xy.S1S2S3S4 <- d.xy.S1S2S3 & dmS4.1 ==
+                    i6
+                  for (i7 in n12) nijk[i1, i2, 16 *
+                                         (i3 - 1) + 8 * (i4 - 1) + 4 * (i5 -
+                                                                          1) + 2 * (i6 - 1) + i7] <- sum(weights[d.xy.S1S2S3S4 &
+                                                                                                                   dmS5.1 == i7])
+                }
+              }
+            }
+          }
+        }
+      }
+      nik <- apply(nijk, 3, rowSums)
+      njk <- apply(nijk, 3, colSums)
+      nk <- colSums(njk)
+      t.log <- array(0, c(2, 2, 32))
+      for (k in 1:32) t.log[, , k] <- nijk[, , k] * (nk[k]/tcrossprod(nik[,
+                                                                          k], njk[, k]))
+    })
+  }
+  else {
+    nijk <- array(0L, c(2, 2, 1))
+    i <- d.x1[1]
+    j <- d.y1[1]
+    k <- NULL
+    lapply(as.list(S), function(x) {
+      k <<- cbind(k, dm[, x] + 1)
+      NULL
+    })
+    parents.count <- 1L
+    parents.val <- t(k[1, ])
+    nijk[i, j, parents.count] <- 1L
+    for (it.sample in 2:n) {
+      new.p <- TRUE
+      i <- d.x1[it.sample]
+      j <- d.y1[it.sample]
+      t.comp <- t(parents.val[1:parents.count, ]) == k[it.sample,
+                                                       ]
+      dim(t.comp) <- c(lenS, parents.count)
+      for (it.parents in 1:parents.count) {
+        if (all(t.comp[, it.parents])) {
+          nijk[i, j, it.parents] <- nijk[i, j, it.parents] +
+            1L
+          new.p <- FALSE
+          break
+        }
+      }
+      if (new.p) {
+        parents.count <- parents.count + 1L
+        if (verbose >= 2)
+          cat(sprintf(" adding new parents (count = %d) at sample %d\n",
+                      parents.count, it.sample))
+        parents.val <- rbind(parents.val, k[it.sample,
+                                            ])
+        nijk <- abind(nijk, array(0, c(2, 2, 1)))
+        nijk[i, j, parents.count] <- 1L
+      }
+    }
+    nik <- apply(nijk, 3, rowSums)
+    njk <- apply(nijk, 3, colSums)
+    nk <- colSums(njk)
+    t.log <- array(0, c(2, 2, parents.count))
+    for (k in 1:parents.count) t.log[, , k] <- nijk[, ,
+                                                    k] * (nk[k]/tcrossprod(nik[, k], njk[, k]))
+  }
+  G2 <- sum(2 * nijk * log(t.log), na.rm = TRUE)
+  if (adaptDF && lenS > 0) {
+    zero.counts <- sum(nijk == 0L) + 4 * (2^lenS - dim(nijk)[3])
+    ndf <- max(1, df - zero.counts)
+    if (verbose)
+      cat("adaptDF: (df=", df, ", zero.counts=", zero.counts,
+          ") ==> new df = ", ndf, "\n", sep = "")
+    df <- ndf
+  }
+  pchisq(G2, df, lower.tail = FALSE)
 }
 
 gSquareBin.weighted <- function (x, y, S, W, dm, adaptDF = FALSE, n.min = 10 * df, verbose = FALSE) 
@@ -615,6 +1047,23 @@ test_wise_deletion <-function(var_ind, data){
   return(data[not_del_ind,])
 }
 
+test_wise_deletion_w <-function(var_ind, data,weights){
+  ## Delete the rows of given variables (var_ind) if there is a missing value in a row
+  ## var_ind: variables in the current conditonal independence test
+  ## data: the whole data set 
+  ##--------------------------------
+  ## Return: the deleted dataset of the variables in the CI test 
+  
+  not_del_ind = c(rep(TRUE,length(data[,1])))
+  for (var in var_ind){
+    if(anyNA(data[,var])){
+      not_del_ind = not_del_ind & !is.na(data[,var])
+    }
+  }  
+  not_del_ind = not_del_ind & !is.na(weights)
+  return(list(data= data[not_del_ind,],weights = weights[not_del_ind]))
+}
+
 get_prt_m_xys<-function(ind, suffStat){
   w = c()
   for(i in ind){
@@ -811,7 +1260,7 @@ skeleton2 <- function (suffStat, indepTest, alpha, labels, p,skel_pre,
 }
 
 
-mvpc<-function(suffStat, indepTest,corrMethod, alpha, labels, p,
+mvpc<-function(suffStat, indepTest,corrMethod,prt_m=prt_m, alpha, labels, p,
                fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
                u2pd = c("relaxed", "rand", "retry"),
                skel.method = c("stable", "original", "stable.fast"),
@@ -824,8 +1273,8 @@ mvpc<-function(suffStat, indepTest,corrMethod, alpha, labels, p,
   # skel.gaps= graph2gaps(skel.ini_)
   
   ## MVPC step1: Detect parents of missingness indicators.
-  prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  
+  # prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+  # print(prt_m)
   suffStat$prt_m = prt_m
   ## MVPC step2:
   # a) Run PC algorithm with the 1st step skeleton;
@@ -867,6 +1316,7 @@ mvpc<-function(suffStat, indepTest,corrMethod, alpha, labels, p,
   fixedGaps <- graph2gaps(skel_pre)
 
   # b) Correction of the extra edges
+  
   skel <- skeleton2(suffStat, corrMethod, alpha, skel_pre=skel_pre, labels = labels,
                    method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
                    NAdelete = NAdelete, m.max = m.max, numCores = numCores,
@@ -1132,3 +1582,58 @@ eva.detection<-function(prt1,prt2){
   }
   return(count)
 }
+
+test_adj<-function(myCPDAG,res){
+  ## Ajacency
+  
+  true_skel<-get_edge_pairs(myCPDAG)
+  our_skel<-get_edge_pairs(res)
+  
+  tran_true_skel<-get_trans_edge_pairs(myCPDAG)
+  tran_our_skel<-get_trans_edge_pairs(res)
+  
+  true_pair <- complex(real = true_skel[,1], imaginary = true_skel[,2])
+  ours_pair <- complex(real = our_skel[,1], imaginary = our_skel[,2])
+  
+  tran_true_pair <- complex(real = tran_true_skel[,1], imaginary = tran_true_skel[,2])
+  tran_ours_pair <- complex(real = tran_our_skel[,1], imaginary = tran_our_skel[,2])
+  
+  # all pairs:
+  all_pair<-union(true_pair,tran_true_pair)
+  all_pair_us <-union(ours_pair,tran_ours_pair)
+  
+  num_our<-length(all_pair_us)
+  num_true<-length(all_pair)
+  num_us_correct<-length(intersect(all_pair_us,all_pair))
+  recall<-num_us_correct/num_true
+  precision<-num_us_correct/num_our
+  return(list(recall=recall, precision=precision))
+}
+
+get_edge_pairs<-function(G){
+  g<-as(G,'matrix')
+  g[lower.tri(g)]<-0
+  g<-g==1
+  which(g, arr.ind = TRUE)
+}
+
+get_trans_edge_pairs<-function(G){
+  g<-t(as(G,'matrix'))
+  g[lower.tri(g)]<-0
+  g<-g==1
+  which(g, arr.ind = TRUE)
+}
+
+compute_rp<-function(rp_){
+  recall = c()
+  precision = c()
+  count = 1
+  for(i in 1:length(rp_)){
+    if(i == 6 | i ==12 | i==18 | i==24){next}
+    recall[count] = rp_[[i]]$recall
+    precision[count] = rp_[[i]]$precision
+    count = count + 1
+  }
+  return(c(mean(recall), sd(recall), mean(precision),sd(precision)))
+}
+
