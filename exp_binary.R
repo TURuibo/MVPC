@@ -21,7 +21,7 @@ rp_pc = list()
 rp_td_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-
+nrep = 1
 for(i_g in 1:10){
   print(paste('graph=', i_g))
   data.name = paste('data',i_g,sep='')
@@ -35,7 +35,7 @@ for(i_g in 1:10){
   DAG = load_bin_graph(graph.file)
   CPDAG = dag2cpdag(DAG)
   
-  for(i_exp in 1:5){
+  for(i_exp in 1:nrep){
     print(paste('rep=', i_exp))
     # Detect colliders and  Colliders' parents
     cldr <- detect_colliders(DAG)
@@ -89,7 +89,7 @@ for(i_g in 1:10){
     suffStat = list(dm=data[1:sample_size,],adaptDF=FALSE)
     res_mcar_pc<-pc(suffStat, binCItest, alpha=0.05, p=20)
     
-    i_ind = (i_g-1)*length(ms) + i_exp
+    i_ind = (i_g-1)*nrep + i_exp
     shd_mvpc_permc[i_ind] =shd(res_mvpc_permc,CPDAG)
     shd_mvpc_drw[i_ind] =shd(res_mvpc_drw,CPDAG)
     shd_ref[i_ind] =shd(res_mcar_pc,CPDAG)
@@ -112,20 +112,21 @@ shd_mvpc_permc = shd_mvpc_permc[!is.na(shd_mvpc_permc)]
 shd_ref = shd_ref[!is.na(shd_ref)]
 shd_pc = shd_pc[!is.na(shd_pc)]
 
-mean(shd_td_pc[1:20])
-mean(shd_mvpc_drw[1:20])
-mean(shd_mvpc_permc[1:20])
-mean(shd_ref[1:20])
-mean(shd_pc[1:20])
+mean(shd_td_pc)
+mean(shd_mvpc_drw)
+mean(shd_mvpc_permc)
+mean(shd_ref)
+mean(shd_pc)
 
-sd(shd_td_pc[1:20])
-sd(shd_mvpc[1:20])
-sd(shd_ref[1:20])
-sd(shd_pc[1:20])
+sd(shd_td_pc)
+sd(shd_mvpc_drw)
+sd(shd_mvpc_permc)
+sd(shd_ref)
+sd(shd_pc)
 
-compute_rp(rp_td_pc[1:20])
-compute_rp(rp_mvpc_permc[1:20])
-compute_rp(rp_mvpc_drw[1:20])
-compute_rp(rp_ref[1:20])
-compute_rp(rp_pc[1:20])
+compute_rp(rp_td_pc)
+compute_rp(rp_mvpc_permc)
+compute_rp(rp_mvpc_drw)
+compute_rp(rp_ref)
+compute_rp(rp_pc)
 

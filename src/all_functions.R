@@ -88,7 +88,7 @@ select_m_ind <- function(num_var,num_m){
   return(sample(x=1:num_var,size=num_m,replace=FALSE))
 }
 
-select_prt_mar_ind <- function(m_ind,num_var){
+select_prt_mar_ind <- function(m_ind, num_var){
   return(sample(x=setdiff(1:num_var,m_ind),size=length(m_ind),replace=TRUE))
 }
 
@@ -150,12 +150,11 @@ create_m_ind <- function(cldr,cldr_prt){
   
   for(i in 1:length(cldr)){
     for(pr in cldr_prt[[i]]){
-      if(length(ms) > 1 && pr %in% ms){ }
+      if(length(ms) > 1 && pr %in% prt_ms){ }  # The missingess variable cannot be a parent of a missingness indicator
       else{
         ms[count] = pr
         prt_ms[count] = cldr[i]
         count = count + 1
-        break
       }
     }
   }
