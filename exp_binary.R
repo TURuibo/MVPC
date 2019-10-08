@@ -21,7 +21,7 @@ rp_pc = list()
 rp_td_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-nrep = 1
+nrep = 5
 for(i_g in 1:10){
   print(paste('graph=', i_g))
   data.name = paste('data',i_g,sep='')
@@ -40,9 +40,10 @@ for(i_g in 1:10){
     # Detect colliders and  Colliders' parents
     cldr <- detect_colliders(DAG)
     cldr_prt <- detect_colliders_prt(DAG, cldr)
-    
     # Choose missingness inidcator and their parents
-    p_m <- create_m_ind(cldr,cldr_prt)
+
+    # p_m <- create_mar_ind(cldr,cldr_prt)
+    p_m <- create_mnar_ind(cldr,cldr_prt)
     ms = p_m$ms
     prt_ms = p_m$prt_ms
     
@@ -66,51 +67,44 @@ for(i_g in 1:10){
     }
     
     prt_m[['prt']]<-prt
-    prt_m
-    ## ********* Correction ********* 
+    ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
     res_mvpc_permc<-mvpc(suffStat, binCItest_td, binCItest.permc,prt_m, alpha=0.05, p=20)
-    
-    ## ********* Correction ********* 
+
+    ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
     res_mvpc_drw<-mvpc(suffStat, binCItest_td, binCItest.drw, prt_m, alpha=0.05, p=20)
-    
+
     ## ********* Complete data evaluation *********
     suffStat = list(data=data,adaptDF=FALSE)
     res_pc<-pc(suffStat, binCItest_td, alpha=0.05, p=20)
-    
-    ## ********* Test-Wise Deletion ********* 
+
+    ## ********* Test-Wise Deletion *********
     sample_size <<- c()
     suffStat = list(data=data_m,adaptDF=FALSE)
     res_td_pc<-pc(suffStat, binCItest_td_ref, alpha=0.05, p=20)
     sample_size <- mean(sample_size)
-    
+
     ## ********* MCAR Complete data evaluation *********
     suffStat = list(dm=data[1:sample_size,],adaptDF=FALSE)
     res_mcar_pc<-pc(suffStat, binCItest, alpha=0.05, p=20)
-    
+
     i_ind = (i_g-1)*nrep + i_exp
     shd_mvpc_permc[i_ind] =shd(res_mvpc_permc,CPDAG)
     shd_mvpc_drw[i_ind] =shd(res_mvpc_drw,CPDAG)
     shd_ref[i_ind] =shd(res_mcar_pc,CPDAG)
     shd_pc[i_ind] = shd(res_pc,CPDAG)
     shd_td_pc[i_ind] =shd(res_td_pc,CPDAG)
-    
+
     rp_mvpc_permc[[i_ind]]= test_adj(res_mvpc_permc, CPDAG)
     rp_mvpc_drw[[i_ind]]= test_adj(res_mvpc_drw, CPDAG)
-    
+
     rp_ref[[i_ind]]= test_adj(res_mcar_pc,CPDAG)
-    
+
     rp_pc[[i_ind]] = test_adj(res_pc,CPDAG)
     rp_td_pc[[i_ind]]=  test_adj(res_td_pc,CPDAG)
   }
 }
-
-shd_td_pc = shd_td_pc[!is.na(shd_td_pc)]
-shd_mvpc_drw = shd_mvpc_drw[!is.na(shd_mvpc_drw)]
-shd_mvpc_permc = shd_mvpc_permc[!is.na(shd_mvpc_permc)]
-shd_ref = shd_ref[!is.na(shd_ref)]
-shd_pc = shd_pc[!is.na(shd_pc)]
 
 mean(shd_td_pc)
 mean(shd_mvpc_drw)

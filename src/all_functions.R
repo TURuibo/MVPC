@@ -143,40 +143,93 @@ detect_colliders_prt <- function(DAG, cldr){
   cldr_prt
 }
 
-create_m_ind <- function(cldr,cldr_prt){
+create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   prt_ms = c()
   ms = c()
   count = 1
   
   for(i in 1:length(cldr)){
     for(pr in cldr_prt[[i]]){
-      if(length(ms) > 1 && pr %in% prt_ms){ }  # The missingess variable cannot be a parent of a missingness indicator
-      else{
+      if(length(ms) == 1){
         ms[count] = pr
         prt_ms[count] = cldr[i]
         count = count + 1
       }
+      else{
+        if((pr !=cldr[i]) && (! (pr %in% ms))){
+          ms[count] = pr
+          prt_ms[count] = cldr[i]
+          count = count + 1
+        }
+      }
     }
   }
   
-  if(count > 4){
-    count = 4
+  if(count > (num_extra_e+1)){
+    ind_cld = sample(1:length(ms))
+    ms = ms[ind_cld]
+    prt_ms = prt_ms[ind_cld]
+    count = (num_extra_e+1)
   }
-  
-  left_ind = setdiff(1:20, ms)
-  left_ind = setdiff(left_ind, cldr)
+  ind_rd = count
+  left_ind = setdiff(1:num_var, ms)
   left_ind = sample(left_ind)
   for(i in 1:floor(length(left_ind)/2)){
     ms[count] = left_ind[i]
     prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
     count = count + 1
   }
-  ms_ = ms[1:3]
-  prt_ms_=prt_ms[1:3]
-  ind = sample(4:length(ms))
-  ms_[4:6] = ms[ind[1:3]]
-  prt_ms_[4:6]=prt_ms[ind[1:3]]
-  return(list(ms = ms_,prt_ms=prt_ms_))  
+  ms_ = ms[1:(ind_rd-1)]
+  prt_ms_=prt_ms[1:(ind_rd-1)]
+  ind = sample(ind_rd:length(ms))
+  ms_[ind_rd:num_m] = ms[ind_rd:num_m]
+  prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
+  return(list(ms = ms_, prt_ms=prt_ms_))  
+}
+
+create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
+  prt_ms = c()
+  ms = c()
+  count = 1
+  
+  for(i in 1:length(cldr)){
+    for(pr in cldr_prt[[i]]){
+      if(length(ms) == 1){
+        ms[count] = pr
+        prt_ms[count] = cldr[i]
+        count = count + 1
+      }
+      else{
+        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
+          ms[count] = pr
+          prt_ms[count] = cldr[i]
+          count = count + 1
+        }
+      }
+    }
+  }
+  
+  if(count > (num_extra_e+1)){
+    ind_cld = sample(1:length(ms))
+    ms = ms[ind_cld]
+    prt_ms = prt_ms[ind_cld]
+    count = (num_extra_e+1)
+  }
+  ind_rd = count
+  left_ind = setdiff(1:num_var, ms)
+  left_ind = setdiff(left_ind, prt_ms)
+  left_ind = sample(left_ind)
+  for(i in 1:floor(length(left_ind)/2)){
+    ms[count] = left_ind[i]
+    prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
+    count = count + 1
+  }
+  ms_ = ms[1:(ind_rd-1)]
+  prt_ms_=prt_ms[1:(ind_rd-1)]
+  ind = sample(ind_rd:length(ms))
+  ms_[ind_rd:num_m] = ms[ind_rd:num_m]
+  prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
+  return(list(ms = ms_, prt_ms=prt_ms_))  
 }
 
 # Example of generating synthetic data
