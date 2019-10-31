@@ -8,8 +8,28 @@ library(e1071)  # For generating all combinations of a binary vector
 library(DescTools)
 library(mipfp)
 #******************Functions for Synthetic Data Generation******************
+gen_m_prt <- function(DAG, mode='mar',
+                      num_var=20, num_extra_e=3, num_m = 6){
+  # Given a DAG, return a list of missingness indicators and their parents
+  
+  cldr <- detect_colliders(DAG)
+  cldr_prt <- detect_colliders_prt(DAG, cldr)
+  # Choose missingness inidcator and their parents
+  if(mode=='mar'){
+    p_m <- create_mar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
+  }
+  else{
+    p_m <- create_mnar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
+  }
 
-gen_data <- function(p,n,mode='mar',seed=1000){
+  ms = p_m$ms
+  prt_ms = p_m$prt_ms
+  return(list(ms = ms, prt_ms=prt_ms))
+}
+
+gen_data <- function(p,n,mode='mar',
+                     num_var=20, num_extra_e=3, num_m = 6, 
+                     seed=1000){
   # p: number of variables 
   # n: data sample size
   # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
@@ -22,16 +42,17 @@ gen_data <- function(p,n,mode='mar',seed=1000){
   
   set.seed(seed) # one seed has a corresponding random graph (seed controls the graph)
   myDAG <- randomDAG(p,2/(p-1))
-  ## Make sure the graph contains collider
-  # while(!check_collider(myDAG)){
-  #   myDAG <- randomDAG(p,2/(p-1))
-  # }
   
   # Make sure the collider is the cause of R-variable of its parent variable
-  data_del <-gen_del(p,n,myDAG,mode)
+  data_del <-gen_del(p, n, myDAG, mode, 
+                     num_m=num_m, 
+                     num_var=num_var, 
+                     num_extra_e =num_extra_e )
+  
   data_m = data_del$data_m
   data_complete = data_del$data_complete
   data_ref <- data.frame(data_del$data_ref)
+  
   # Also provide reference, a MCAR data set and the ground-truth (DAG, missingness indicator, and parents of the missingness indicators ).
   ground_truth <- list(
     dag=myDAG,
@@ -47,7 +68,10 @@ gen_data <- function(p,n,mode='mar',seed=1000){
               ground_truth=ground_truth))
 }
 
-gen_del <- function(p,n,myDAG,mode='mar',num_m=6){
+gen_del <- function(p,n,myDAG,mode='mar',
+                    num_m=6,
+                    num_var=20, 
+                    num_extra_e=3){
   # Constraint of MAR:
   # 1. the missingness indicator is caused by some substantive variables;
   # 2. the parents of missingness indicator have no missing values in the data set.
@@ -62,18 +86,14 @@ gen_del <- function(p,n,myDAG,mode='mar',num_m=6){
   
   num_var <- p
   num_samples <- n
-  # 1. Choose the missingness indicators/ choose which variables contain missing values 
-  m_ind = select_m_ind(num_var,num_m)
+  prt_m = gen_m_prt(myDAG,mode,
+                    num_m=num_m, 
+                    num_var=num_var, 
+                    num_extra_e =num_extra_e )
   
-  # 2. Choose the cause of missingess indicators
-  if(mode=="mar"){
-    prt_m = select_prt_mar_ind(m_ind,num_var)
-  }else{
-    prt_m = select_prt_mnar_ind(m_ind,num_var)
-  }
   
   # 3. Generate missing values according the the values of missingness indicators
-  data_com_m_ref = generate_missing_values(p,n,myDAG,m_ind,prt_m)
+  data_com_m_ref = generate_missing_values(p,n,myDAG, prt_m$ms, prt_m$prt_ms)
   data_m = data_com_m_ref$data_m
   data_ref = data_com_m_ref$data_ref
   data_complete = data_com_m_ref$data_complete
@@ -81,28 +101,10 @@ gen_del <- function(p,n,myDAG,mode='mar',num_m=6){
   return(list(data_complete=data_complete,
               data_m=data_m,
               data_ref=data_ref,
-              parent_m_ind=prt_m,
-              m_ind=m_ind)) 
+              parent_m_ind=prt_m$prt_ms,
+              m_ind=prt_m$ms)) 
 }
 
-select_m_ind <- function(num_var,num_m){
-  return(sample(x=1:num_var,size=num_m,replace=FALSE))
-}
-
-select_prt_mar_ind <- function(m_ind, num_var){
-  return(sample(x=setdiff(1:num_var,m_ind),size=length(m_ind),replace=TRUE))
-}
-
-select_prt_mnar_ind <- function(m_ind,num_var){
-  # No self-masking
-  # only the variable contains missing values can be the parents of missingness indicators
-  prts = c()
-  for(i in m_ind){
-    newelem<-sample(setdiff(m_ind,i),size=1)
-    prts <- c(prts, newelem) 
-  }
-  return(prts)
-}
 
 generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
   # Give the parents of missingness indicators, and the missingness indcators
@@ -112,7 +114,7 @@ generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
   data_mcar=data
   for(i in c(1:length(m_ind))){
     # Choose lower "bottom_p" percentage of the values
-    bottom_p <- runif(1, min = 0.1, max = 0.5)
+    bottom_p <- runif(1, min = 0.1, max = 0.7)
     r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
     data_m[r, m_ind[i]] = NA
     r_mcar<-sample(r)
@@ -151,7 +153,7 @@ create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   
   for(i in 1:length(cldr)){
     for(pr in cldr_prt[[i]]){
-      if(length(ms) == 1){
+      if(length(ms) == 0){
         ms[count] = pr
         prt_ms[count] = cldr[i]
         count = count + 1
@@ -195,7 +197,7 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   
   for(i in 1:length(cldr)){
     for(pr in cldr_prt[[i]]){
-      if(length(ms) == 1){
+      if(length(ms) == 0){
         ms[count] = pr
         prt_ms[count] = cldr[i]
         count = count + 1
@@ -251,9 +253,6 @@ load_bin_graph<-function(graph.file){
   }
   DAG <- as(graph,'graphNEL')
 }
-
-#****************** Connection with Matlab ****************** 
-
 
 #****************** (Conditional) Independence Test ****************** 
 binCItest.permc<- function(x, y, S, suffStat){  
@@ -958,33 +957,42 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   ##    suffStat$data: the dataset
   ##--------------
   ## Return: the p-value of the test 
-  print('gaussCItest.drw')
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
   # Note that "tw_data" and "weights" should have the same order/index
-  test_ind = c(x,y,S)
-  tw_data = test_wise_deletion(test_ind,suffStat$data)
-  weights = compute.weights.continuous(x, y, S, suffStat)
-
+  
+  ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
+  if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
+  
+  checkW <- ind_W
+  while(length(pa_W <- get_prt_m_xys(checkW, suffStat)) > 0){
+    ind_W <- c(ind_W, pa_W) # Get parents the W missingness indicators
+    checkW = pa_W
+  } 
+  ind_W <- unique(ind_W)
+  
+  corr_ind = c(x,y,S,ind_W)
+  tw_data = test_wise_deletion(corr_ind, suffStat$data)
+  weights = compute.weights.continuous(corr_ind, suffStat)
+ 
   suffStat$C = wtd.cors(tw_data, tw_data, weights)
   suffStat$n = length(weights)
   
   if(length(S)>0){
-    gaussCItest(1, 2, 3:length(test_ind),suffStat)
+    gaussCItest(1, 2, 3:length(c(x,y,S)),suffStat)
   }
   else{
     gaussCItest(1, 2, c(),suffStat)
   }
 }
 
-compute.weights.continuous<-function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  
-  ind.twdel = indx_test_wise_deletion(test_ind,suffStat$data)
+compute.weights.continuous<-function(corr_ind, suffStat){
+  ind.twdel = indx_test_wise_deletion(corr_ind,suffStat$data)
   weights = rep(1,length(ind.twdel))  # length of test-wise deleted data
-  ind_r_xys = get_ind_r_xys(x, y, S, suffStat)
+  ind_r_xys = get_ind_r_xys(corr_ind, suffStat)
+  
   for(ind_ri in ind_r_xys){
-    ind_pa =get_prt_m_xys(c(ind_ri), suffStat) # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
-    pa = suffStat$data[,4]
+    ind_pa =get_prt_m_xys(c(ind_ri), suffStat) 
+    # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
+    pa = suffStat$data[,ind_pa]
     beta = k.weights(pa[ind.twdel], pa[!is.na(pa)])
     weights = weights * beta
   }
@@ -996,7 +1004,7 @@ k.weights <- function (x, x_target){
   setVariable(matlab, X = x)
   setVariable(matlab, X_target=x_target)
   if(length(x)<800){
-    coeff = 0.2 
+    coeff = 0.5 
   }else if(length(x) > 1500){
     coeff = 0.25
   }else{
@@ -1065,7 +1073,7 @@ DRWCItest <- function(x, y, S, suffStat){
   
   # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
   # Note that data for training the logistic regression are different with the data used for computing weights.
-  ind_r_xys <- get_ind_r_xys(x, y, S, suffStat)
+  ind_r_xys <- get_ind_r_xys(c(x, y, S), suffStat)
   ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
   weights = sum(ind)/length(ind)  # "ri = 0" means missing value
   
@@ -1089,7 +1097,8 @@ DRWCItest <- function(x, y, S, suffStat){
   suffStat_drw  = list(C=wtd.cors(data_td,data_td,weights), n=length(weights))
   gaussCItest(x, y, S, suffStat_drw)
   
-}  # Logistic regression is not general enough for estimate the ratio, thus waiting for density ratio estimate
+}  
+# Logistic regression is not general enough for estimate the ratio, thus waiting for density ratio estimate
 
 iscorr<- function(x, y, S, suffStat){
   return(TRUE)
@@ -1129,10 +1138,10 @@ get_logidata <- function(ind_ri,  suffStat){
   test_wise_deletion(1:length(logidata[1,]), logidata)  
 }
 
-get_ind_r_xys <- function(x, y, S, suffStat){
+get_ind_r_xys <- function(ind, suffStat){
   # return index of missingness indicators of x, y, S
   ind_r_xys <- c()
-  for(i in c(x,y,S)){
+  for(i in ind){
     if(sum(is.na(suffStat$data[,i]))>0){
       ind_r_xys = c(ind_r_xys,i) 
       }

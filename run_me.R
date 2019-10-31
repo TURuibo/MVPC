@@ -1,3 +1,15 @@
+#************ set up the environment of R.Matlab ************
+library(R.matlab)
+print("Setting up matlab")
+options(matlab="/Applications/MATLAB_R2019b.app/bin/matlab")
+Matlab$startServer()
+matlab <- Matlab()
+isOpen <- open(matlab)
+path = "/Users/ruibo/Desktop/mvpc/mvpc_v2/MVPC/src/KCI-test"
+addpath = paste0("addpath('",path,"')", sep = "")
+evaluate(matlab, addpath)
+#************ END: set up the environment of R.Matlab ************
+
 # The path of "R-proj"
 proj_path<-getwd()
 src_path<-paste(proj_path,'/src',sep="")
@@ -9,9 +21,11 @@ source(paste(src_path,'/all_functions.R',sep=""))
 # ********* Synthethic data generation ********* 
 
 num_var = 20
-num_sample = 1000
-rdm_seed = 10
-gen_result_list<-gen_data(num_var,num_sample,"mar",rdm_seed)
+num_sample = 10000
+
+gen_result_list<-gen_data(num_var,num_sample,"mnar",
+                          num_var=20, num_extra_e=8, num_m = 10, 
+                          seed = 9)
 
 data_complete = gen_result_list$data_complete
 data_m = gen_result_list$data_m
@@ -22,26 +36,40 @@ prt = gen_result_list$ground_truth$parent_m_ind
 m = gen_result_list$ground_truth$m_ind
 gth = data.frame(m=m,prt=prt)
 gth <- gth[order(gth$m),] 
+
 cat("Number of colliders that are parents of missingness inidcators: ", length(intersect(prt, collider)))
 
 # ********* MVPC *********
-suffStat_m <- list(data=data_m,prt_m=gth)
-suffStat  = list(C = cor(data_ref),n=num_sample)
+prt_m<-data.frame(m=m)
 
-res_mvpc<-mvpc(suffStat_m, 
+prt1 = list()
+for(i in 1:length(prt)){
+  prt1[[i]] = c(prt[i])  
+}
+
+prt_m[['prt']]<-prt1
+
+suffStat_m <- list(data=data_m,prt_m=prt_m)
+suffStat  = list(C = cor(data_complete),n=num_sample)
+
+res.mvpc.permc <-mvpc(suffStat_m, 
                gaussCItest_td, PermCCItest,
-               prt_m=gth, alpha=0.01, p=num_var)
+               prt_m=prt_m, alpha=0.01, p=num_var)
 
-res_mvpc<-mvpc(suffStat_m, 
-               gaussCItest_td, gaussCItest.drw,
-               prt_m=gth, alpha=0.01, p=num_var)
-
-res_pc<-pc(suffStat_m, 
+res_tw<-pc(suffStat_m, 
            gaussCItest_td, 
            alpha=0.01, p=num_var)
 
 res_com_pc<-pc(suffStat, gaussCItest, alpha=0.01, p=num_var)
 
-shd(res_pc,myCPDAG)
+shd(res_tw,myCPDAG)
 shd(res_com_pc,myCPDAG)
-shd(res_mvpc,myCPDAG)
+shd(res.mvpc.permc,myCPDAG)
+
+
+res.mvpc.drw <-mvpc(suffStat_m,
+                    gaussCItest_td, 
+                    gaussCItest.drw,
+                    prt_m=gth, alpha=0.01, p=num_var)
+
+shd(res.mvpc.drw,myCPDAG)

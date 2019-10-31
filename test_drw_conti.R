@@ -1,12 +1,6 @@
-library(R.matlab)
-## The path of "R-proj"
-proj_path<-getwd()
-src_path<-paste(proj_path,'/src',sep="")
-res_path<-paste(proj_path,'/result',sep="")
-data_path<-paste(proj_path,'/data',sep="")
-source(paste(src_path,'/all_functions.R',sep=""))
-
 #************ set up the environment of R.Matlab ************
+library(R.matlab)
+close(matlab)
 print("Setting up matlab")
 options(matlab="/Applications/MATLAB_R2019b.app/bin/matlab")
 Matlab$startServer()
@@ -16,6 +10,12 @@ path = "/Users/ruibo/Desktop/mvpc/mvpc_v2/MVPC/src/KCI-test"
 addpath = paste0("addpath('",path,"')", sep = "")
 evaluate(matlab, addpath)
 #************ END: set up the environment of R.Matlab ************
+## The path of "R-proj"
+proj_path<-getwd()
+src_path<-paste(proj_path,'/src',sep="")
+res_path<-paste(proj_path,'/result',sep="")
+data_path<-paste(proj_path,'/data',sep="")
+source(paste(src_path,'/all_functions.R',sep=""))
 
 
 n <- 1000
@@ -43,8 +43,7 @@ prt_m[['prt']]<-prt
 suffStat = list(data = dat.m, prt_m=prt_m, adaptDF = FALSE)
 gaussCItest_td(1, 2, c(3), suffStat)
 gaussCItest.drw(1, 2, c(3), suffStat)
-
-gaussCItest.drw(1, 2, c(), suffStat)
+# gaussCItest.drw(1, 2, c(), suffStat)
 
 
 # **************** Test 2 **************** 
@@ -64,14 +63,7 @@ suffStat = list(data = dat.m2, prt_m=prt_m, adaptDF = FALSE)
 gaussCItest_td(1, 2, c(3), suffStat)
 gaussCItest.drw(1, 2, c(3), suffStat)
 # **************** END: Test 2 ****************
-fun(fun)
 
-fun <- function(f){
-  print(f)
-}
-match.fun("fun")
-f = fun
-name.check(f, "fun")
 # **************** Test 3 ****************
 # Add missingness mechanism
 dat.m3 = dat
