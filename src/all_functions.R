@@ -1,3 +1,4 @@
+library(R.matlab)
 library(pcalg)
 library(mvtnorm)
 library(weights)
@@ -232,9 +233,6 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   return(list(ms = ms_, prt_ms=prt_ms_))  
 }
 
-# Example of generating synthetic data
-# gen_data(20,10,"mnar")
-
 load_bin_data<-function(fdata){
   read.table(fdata, header=TRUE, sep="\t", stringsAsFactors = FALSE) 
 }
@@ -253,6 +251,9 @@ load_bin_graph<-function(graph.file){
   }
   DAG <- as(graph,'graphNEL')
 }
+
+#****************** Connection with Matlab ****************** 
+
 
 #****************** (Conditional) Independence Test ****************** 
 binCItest.permc<- function(x, y, S, suffStat){  
@@ -948,9 +949,65 @@ gaussCItest_td <- function(x, y, S, suffStat) {
   suffStat$C = cor(data)
   suffStat$n = length(data[,1])
   gaussCItest(x, y, S, suffStat)
-  # z <- zStat(x,y,S, 
-  #            C = cor(data), n = length(data[,1]))
-  # 2*pnorm(abs(z), lower.tail = FALSE)
+}
+
+gaussCItest.drw <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  print('gaussCItest.drw')
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  # Note that "tw_data" and "weights" should have the same order/index
+  test_ind = c(x,y,S)
+  tw_data = test_wise_deletion(test_ind,suffStat$data)
+  weights = compute.weights.continuous(x, y, S, suffStat)
+
+  suffStat$C = wtd.cors(tw_data, tw_data, weights)
+  suffStat$n = length(weights)
+  
+  if(length(S)>0){
+    gaussCItest(1, 2, 3:length(test_ind),suffStat)
+  }
+  else{
+    gaussCItest(1, 2, c(),suffStat)
+  }
+}
+
+compute.weights.continuous<-function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  
+  ind.twdel = indx_test_wise_deletion(test_ind,suffStat$data)
+  weights = rep(1,length(ind.twdel))  # length of test-wise deleted data
+  ind_r_xys = get_ind_r_xys(x, y, S, suffStat)
+  for(ind_ri in ind_r_xys){
+    ind_pa =get_prt_m_xys(c(ind_ri), suffStat) # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
+    pa = suffStat$data[,4]
+    beta = k.weights(pa[ind.twdel], pa[!is.na(pa)])
+    weights = weights * beta
+  }
+  weights
+}
+
+k.weights <- function (x, x_target){
+  # kernel-based density ratio estimate
+  setVariable(matlab, X = x)
+  setVariable(matlab, X_target=x_target)
+  if(length(x)<800){
+    coeff = 0.2 
+  }else if(length(x) > 1500){
+    coeff = 0.25
+  }else{
+    coeff = 0.4
+  }
+  set.width = paste0("width =",coeff,"* std(X);", sep = "")
+  
+  evaluate(matlab, set.width)
+  evaluate(matlab, "[beta_cs EXITFLAG_cs] = betaKMM_improved(X, X_target, width, 0, 0);")
+  beta_cs = getVariable(matlab, "beta_cs")
+  beta = beta_cs$beta.cs
 }
 
 PermCCItest <- function(x, y, S, suffStat){
@@ -1097,6 +1154,23 @@ test_wise_deletion <-function(var_ind, data){
     }
   }  
   return(data[not_del_ind,])
+}
+
+indx_test_wise_deletion <-function(var_ind, data){
+  ## Delete the rows of given variables (var_ind) if there is a missing value in a row
+  ## var_ind: variables in the current conditonal independence test
+  ## data: the whole data set 
+  ##--------------------------------
+  ## Return: the index of the deleted dataset with the variables in the CI test 
+  
+  not_del_ind = c(rep(TRUE,length(data[,1])))
+  for (var in var_ind){
+    if(anyNA(data[,var])){
+      not_del_ind = not_del_ind & !is.na(data[,var])
+    }
+  }  
+  ind = 1:length(not_del_ind)
+  return(ind[not_del_ind])
 }
 
 test_wise_deletion_w <-function(var_ind, data,weights){
@@ -1312,7 +1386,7 @@ skeleton2 <- function (suffStat, indepTest, alpha, labels, p,skel_pre,
 }
 
 
-mvpc<-function(suffStat, indepTest,corrMethod,prt_m=prt_m, alpha, labels, p,
+mvpc<-function(suffStat, indepTest,corrMethod,prt_m, alpha, labels, p,
                fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
                u2pd = c("relaxed", "rand", "retry"),
                skel.method = c("stable", "original", "stable.fast"),
