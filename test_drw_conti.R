@@ -24,7 +24,7 @@ x <- rnorm(n, mean=0, sd=1)
 z <- rnorm(n, mean=0, sd=1) + x
 y <- rnorm(n, mean=0, sd=1) + z
 w <- x + y + rnorm(n, mean=0, sd=1)
-w2 <- 2*x + y + rnorm(n, mean=0, sd=1)
+w2 <- 2*x - 2* y + rnorm(n, mean=0, sd=1)
 dat <- cbind(x,y,z,w,w2)
 
 suffStat=list(C= cor(dat),n=length(dat[,1]))

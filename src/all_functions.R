@@ -9,7 +9,9 @@ library(DescTools)
 library(mipfp)
 #******************Functions for Synthetic Data Generation******************
 gen_m_prt <- function(DAG, mode='mar',
-                      num_var=20, num_extra_e=3, num_m = 6){
+                      num_var=20, 
+                      num_extra_e=3, 
+                      num_m = 6){
   # Given a DAG, return a list of missingness indicators and their parents
   
   cldr <- detect_colliders(DAG)
@@ -27,8 +29,11 @@ gen_m_prt <- function(DAG, mode='mar',
   return(list(ms = ms, prt_ms=prt_ms))
 }
 
-gen_data <- function(p,n,mode='mar',
-                     num_var=20, num_extra_e=3, num_m = 6, 
+gen_data <- function(num_sample,
+                     mode='mar',
+                     num_var=20, 
+                     num_extra_e=3, 
+                     num_m = 6, 
                      seed=1000){
   # p: number of variables 
   # n: data sample size
@@ -41,10 +46,10 @@ gen_data <- function(p,n,mode='mar',
   # ground_truth: the ground-true DAG, CPDAG, 
   
   set.seed(seed) # one seed has a corresponding random graph (seed controls the graph)
-  myDAG <- randomDAG(p,2/(p-1))
+  myDAG <- randomDAG(num_var,2/(num_var-1))
   
   # Make sure the collider is the cause of R-variable of its parent variable
-  data_del <-gen_del(p, n, myDAG, mode, 
+  data_del <-gen_del(num_sample, myDAG, mode, 
                      num_m=num_m, 
                      num_var=num_var, 
                      num_extra_e =num_extra_e )
@@ -68,7 +73,7 @@ gen_data <- function(p,n,mode='mar',
               ground_truth=ground_truth))
 }
 
-gen_del <- function(p,n,myDAG,mode='mar',
+gen_del <- function(n,myDAG,mode='mar',
                     num_m=6,
                     num_var=20, 
                     num_extra_e=3){
@@ -84,7 +89,6 @@ gen_del <- function(p,n,myDAG,mode='mar',
   # 3. the limitation of the correction method 
   # ********************
   
-  num_var <- p
   num_samples <- n
   prt_m = gen_m_prt(myDAG,mode,
                     num_m=num_m, 
@@ -93,7 +97,7 @@ gen_del <- function(p,n,myDAG,mode='mar',
   
   
   # 3. Generate missing values according the the values of missingness indicators
-  data_com_m_ref = generate_missing_values(p,n,myDAG, prt_m$ms, prt_m$prt_ms)
+  data_com_m_ref = generate_missing_values(num_var,n,myDAG, prt_m$ms, prt_m$prt_ms)
   data_m = data_com_m_ref$data_m
   data_ref = data_com_m_ref$data_ref
   data_complete = data_com_m_ref$data_complete
@@ -140,7 +144,7 @@ detect_colliders_prt <- function(DAG, cldr){
   cldr_prt = list()
   count = 1
   for(i in cldr){
-    cldr_prt[[count]]=a[m[,i]==1]
+    cldr_prt[[count]]=a[m[,i]>0] # contain the situation where  "== 1"
     count = count + 1 
   }
   cldr_prt
@@ -212,27 +216,46 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
     }
   }
   
+  # Only involve "num_extra_e" number of colliders
   if(count > (num_extra_e+1)){
     ind_cld = sample(1:length(ms))
     ms = ms[ind_cld]
     prt_ms = prt_ms[ind_cld]
     count = (num_extra_e+1)
   }
+  
   ind_rd = count
-  left_ind = setdiff(1:num_var, ms)
-  left_ind = setdiff(left_ind, prt_ms)
-  left_ind = sample(left_ind)
-  for(i in 1:floor(length(left_ind)/2)){
-    ms[count] = left_ind[i]
-    prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
-    count = count + 1
+  left_ind_prt = setdiff(1:num_var, cldr)
+  left_ind_prt = setdiff(left_ind_prt, ms)
+  left_ind_prt = setdiff(left_ind_prt, prt_ms)
+  
+  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
+  
+  if(length(left_ind_prt) < (num_m - length(ms))){
+    end_for = length(left_ind_prt)
+  }else{
+    end_for = num_m - length(ms)
   }
-  ms_ = ms[1:(ind_rd-1)]
-  prt_ms_=prt_ms[1:(ind_rd-1)]
-  ind = sample(ind_rd:length(ms))
-  ms_[ind_rd:num_m] = ms[ind_rd:num_m]
-  prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
-  return(list(ms = ms_, prt_ms=prt_ms_))  
+  
+  countp = count
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    prt_ms[countp] = left_ind_prt[i]
+    countp = countp + 1
+  }
+  
+  left_ind_m = setdiff(1:num_var, ms) 
+  left_ind_m = setdiff(left_ind_m, prt_ms)
+  left_ind_m = sample(left_ind_m)
+  countm = count
+  
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    ms[countm] = left_ind_m[i]
+    countm = countm + 1
+  }
+  
+  return(list(ms = ms, prt_ms=prt_ms))  
 }
 
 load_bin_data<-function(fdata){
@@ -958,6 +981,7 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   ##--------------
   ## Return: the p-value of the test 
   # Note that "tw_data" and "weights" should have the same order/index
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
   
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
@@ -977,10 +1001,16 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   suffStat$n = length(weights)
   
   if(length(S)>0){
-    gaussCItest(1, 2, 3:length(c(x,y,S)),suffStat)
+    pval = gaussCItest(1, 2, 3:length(c(x,y,S)),suffStat)
+    cat(c(x,y,S),file="outfile.txt",sep="\n",append=TRUE)
+    cat(pval,file="outfile.txt",sep="\n",append=TRUE)
+    pval
   }
   else{
-    gaussCItest(1, 2, c(),suffStat)
+    pval = gaussCItest(1, 2, c(),suffStat)
+    cat(c(x,y,S),file="outfile.txt",sep="\n",append=TRUE)
+    cat(pval,file="outfile.txt",sep="\n",append=TRUE)
+    pval
   }
 }
 
@@ -1004,11 +1034,11 @@ k.weights <- function (x, x_target){
   setVariable(matlab, X = x)
   setVariable(matlab, X_target=x_target)
   if(length(x)<800){
-    coeff = 0.5 
+    coeff = 0.7
   }else if(length(x) > 1500){
     coeff = 0.25
   }else{
-    coeff = 0.4
+    coeff = 0.5
   }
   set.width = paste0("width =",coeff,"* std(X);", sep = "")
   
@@ -1016,6 +1046,7 @@ k.weights <- function (x, x_target){
   evaluate(matlab, "[beta_cs EXITFLAG_cs] = betaKMM_improved(X, X_target, width, 0, 0);")
   beta_cs = getVariable(matlab, "beta_cs")
   beta = beta_cs$beta.cs
+  beta = 1/beta
 }
 
 PermCCItest <- function(x, y, S, suffStat){
@@ -1059,10 +1090,17 @@ PermCCItest <- function(x, y, S, suffStat){
   }
   suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
   if(length(ind_test)>2){
-    gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)  
+    pval = gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)
+    print(c(x,y,S))
+    print(pval)
+    pval
+    
   }
   else{
-    gaussCItest(1, 2,c(), suffStat_perm)
+    pval = gaussCItest(1, 2,c(), suffStat_perm)
+    print(c(x,y,S))
+    print(pval)
+    pval
   }
 }
 
