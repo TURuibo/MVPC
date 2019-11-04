@@ -197,17 +197,23 @@ create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   ind_rd = count
   left_ind = setdiff(1:num_var, ms)
   left_ind = sample(left_ind)
-  for(i in 1:floor(length(left_ind)/2)){
-    ms[count] = left_ind[i]
-    prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
-    count = count + 1
+  if(floor(length(left_ind)/2)<2){  # Check the number of MCAR missingness indicators
+    return(list(ms = ms, prt_ms=prt_ms))  
   }
-  ms_ = ms[1:(ind_rd-1)]
-  prt_ms_=prt_ms[1:(ind_rd-1)]
-  ind = sample(ind_rd:length(ms))
-  ms_[ind_rd:num_m] = ms[ind_rd:num_m]
-  prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
-  return(list(ms = ms_, prt_ms=prt_ms_))  
+  else{
+    for(i in 1:floor(length(left_ind)/2)){
+      ms[count] = left_ind[i]
+      prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
+      count = count + 1
+    }
+    ms_ = ms[1:(ind_rd-1)]
+    prt_ms_=prt_ms[1:(ind_rd-1)]
+    ind = sample(ind_rd:length(ms))
+    ms_[ind_rd:num_m] = ms[ind_rd:num_m]
+    prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
+    return(list(ms = ms_, prt_ms=prt_ms_))  
+  }
+  
 }
 
 create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
@@ -235,8 +241,8 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   # Only involve "num_extra_e" number of colliders
   if(count > (num_extra_e+1)){
     ind_cld = sample(1:length(ms))
-    ms = ms[ind_cld]
-    prt_ms = prt_ms[ind_cld]
+    ms = ms[ind_cld[1:num_extra_e]]
+    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
     count = (num_extra_e+1)
   }
   
@@ -244,34 +250,38 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   left_ind_prt = setdiff(1:num_var, cldr)
   left_ind_prt = setdiff(left_ind_prt, ms)
   left_ind_prt = setdiff(left_ind_prt, prt_ms)
-  
-  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
-  
-  if(length(left_ind_prt) < (num_m - length(ms))){
-    end_for = length(left_ind_prt)
-  }else{
-    end_for = num_m - length(ms)
+  if(length(left_ind_prt)==0){
+    return(list(ms = ms, prt_ms=prt_ms))  
   }
-  
-  countp = count
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    prt_ms[countp] = left_ind_prt[i]
-    countp = countp + 1
+  else{
+    left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
+    
+    if(length(left_ind_prt) < (num_m - length(ms))){
+      end_for = length(left_ind_prt)
+    }else{
+      end_for = num_m - length(ms)
+    }
+    
+    countp = count
+    for(i in 1:end_for){
+      # Append prt not MAR, i.e., not collider
+      prt_ms[countp] = left_ind_prt[i]
+      countp = countp + 1
+    }
+    
+    left_ind_m = setdiff(1:num_var, ms) 
+    left_ind_m = setdiff(left_ind_m, prt_ms)
+    left_ind_m = sample(left_ind_m)
+    countm = count
+    
+    for(i in 1:end_for){
+      # Append prt not MAR, i.e., not collider
+      ms[countm] = left_ind_m[i]
+      countm = countm + 1
+    }
+    
+    return(list(ms = ms, prt_ms=prt_ms))   
   }
-  
-  left_ind_m = setdiff(1:num_var, ms) 
-  left_ind_m = setdiff(left_ind_m, prt_ms)
-  left_ind_m = sample(left_ind_m)
-  countm = count
-  
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    ms[countm] = left_ind_m[i]
-    countm = countm + 1
-  }
-  
-  return(list(ms = ms, prt_ms=prt_ms))  
 }
 
 load_bin_data<-function(fdata){
@@ -992,6 +1002,23 @@ gSquareBin.weighted <- function (x, y, S, W, dm, adaptDF = FALSE, n.min = 10 * d
   pchisq(G2, df, lower.tail = FALSE)
 }
 
+gaussCItest_td_ref <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
+}
+
 gaussCItest_td <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
@@ -1006,6 +1033,7 @@ gaussCItest_td <- function(x, y, S, suffStat) {
   suffStat$n = length(data[,1])
   gaussCItest(x, y, S, suffStat)
 }
+
 
 gaussCItest.drw <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
