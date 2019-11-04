@@ -1,9 +1,10 @@
-library(R.matlab)
 library(pcalg)
 library(mvtnorm)
 library(weights)
 library(ks)
 library(e1071)  # For generating all combinations of a binary vector
+library(weights)  # For kernel density estimate
+library(ks)
 
 library(DescTools)
 library(mipfp)
@@ -34,7 +35,8 @@ gen_data <- function(num_sample,
                      num_var=20, 
                      num_extra_e=3, 
                      num_m = 6, 
-                     seed=1000){
+                     seed=1000,
+                     p_missing_h=0.9, p_missing_l=0.01){
   # p: number of variables 
   # n: data sample size
   # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
@@ -52,7 +54,8 @@ gen_data <- function(num_sample,
   data_del <-gen_del(num_sample, myDAG, mode, 
                      num_m=num_m, 
                      num_var=num_var, 
-                     num_extra_e =num_extra_e )
+                     num_extra_e =num_extra_e,
+                     p_missing_h, p_missing_l)
   
   data_m = data_del$data_m
   data_complete = data_del$data_complete
@@ -76,7 +79,8 @@ gen_data <- function(num_sample,
 gen_del <- function(n,myDAG,mode='mar',
                     num_m=6,
                     num_var=20, 
-                    num_extra_e=3){
+                    num_extra_e=3,
+                    p_missing_h=0.9, p_missing_l=0.01){
   # Constraint of MAR:
   # 1. the missingness indicator is caused by some substantive variables;
   # 2. the parents of missingness indicator have no missing values in the data set.
@@ -97,7 +101,8 @@ gen_del <- function(n,myDAG,mode='mar',
   
   
   # 3. Generate missing values according the the values of missingness indicators
-  data_com_m_ref = generate_missing_values(num_var,n,myDAG, prt_m$ms, prt_m$prt_ms)
+  data_com_m_ref = generate_missing_values(num_var,n,myDAG, prt_m$ms, prt_m$prt_ms,
+                                           p_missing_h, p_missing_l)
   data_m = data_com_m_ref$data_m
   data_ref = data_com_m_ref$data_ref
   data_complete = data_com_m_ref$data_complete
@@ -110,7 +115,7 @@ gen_del <- function(n,myDAG,mode='mar',
 }
 
 
-generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
+generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind, p_missing_h=0.9, p_missing_l=0.01){
   # Give the parents of missingness indicators, and the missingness indcators
   # The missing values are generated whn the parent values are in the bottom XX percentage.
   data <- rmvnorm(n, mean=rep(0,p), sigma=trueCov(myDAG))
@@ -119,7 +124,9 @@ generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
   for(i in c(1:length(m_ind))){
     # Choose lower "bottom_p" percentage of the values
     bottom_p <- runif(1, min = 0.1, max = 0.7)
-    r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
+    r <- mis_cal_ind(data[,parent_m_ind[i]], qnorm(bottom_p), p_missing_h, p_missing_l)
+    
+    # r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
     data_m[r, m_ind[i]] = NA
     r_mcar<-sample(r)
     data_mcar[r_mcar, m_ind[i]] = NA
@@ -128,6 +135,15 @@ generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind){
               data_m=data_m,
               data_ref=data_mcar))
 }
+
+mis_cal_ind<-function(x, bottom_p, p_missing_h=0.9, p_missing_l=0.01){
+  ind = x < bottom_p
+  h_x = rbinom(length(x),1,p_missing_h) ==1
+  l_x = rbinom(length(x),1,p_missing_l) ==1
+  out = l_x
+  out[ind] = h_x[ind]
+  out
+} 
 
 detect_colliders <- function(myDAG){
   m <- as(myDAG,"matrix")
@@ -276,6 +292,24 @@ load_bin_graph<-function(graph.file){
   }
   DAG <- as(graph,'graphNEL')
 }
+
+#************ set up the environment of R.Matlab ************
+initialize.rmatlab<-function(){
+  library(R.matlab)
+  print("Setting up matlab")
+  options(matlab="/Applications/MATLAB_R2019b.app/bin/matlab")
+  Matlab$startServer()
+  matlab <- Matlab()
+  isOpen <- open(matlab)
+  path = "/Users/ruibo/Desktop/mvpc/mvpc_v2/MVPC/src/KCI-test"
+  addpath = paste0("addpath('",path,"')", sep = "")
+  evaluate(matlab, addpath)
+  return(matlab)
+}
+# Example: 
+# matlab <- initialize.rmatlab()
+# close(matlab)
+# #************ END: set up the environment of R.Matlab ************  
 
 #****************** (Conditional) Independence Test ****************** 
 binCItest.permc<- function(x, y, S, suffStat){  
@@ -994,27 +1028,16 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   ind_W <- unique(ind_W)
   
   corr_ind = c(x,y,S,ind_W)
-  tw_data = test_wise_deletion(corr_ind, suffStat$data)
+  tw_data = test_wise_deletion(corr_ind, suffStat$data) # Fixed bug: The same number of variables as the orginal dataset
   weights = compute.weights.continuous(corr_ind, suffStat)
  
   suffStat$C = wtd.cors(tw_data, tw_data, weights)
   suffStat$n = length(weights)
-  
-  if(length(S)>0){
-    pval = gaussCItest(1, 2, 3:length(c(x,y,S)),suffStat)
-    cat(c(x,y,S),file="outfile.txt",sep="\n",append=TRUE)
-    cat(pval,file="outfile.txt",sep="\n",append=TRUE)
-    pval
-  }
-  else{
-    pval = gaussCItest(1, 2, c(),suffStat)
-    cat(c(x,y,S),file="outfile.txt",sep="\n",append=TRUE)
-    cat(pval,file="outfile.txt",sep="\n",append=TRUE)
-    pval
-  }
+  gaussCItest(x, y, S,suffStat)
+
 }
 
-compute.weights.continuous<-function(corr_ind, suffStat){
+compute.weights.continuous<-function(corr_ind, suffStat, kernel.method = kde.weights){
   ind.twdel = indx_test_wise_deletion(corr_ind,suffStat$data)
   weights = rep(1,length(ind.twdel))  # length of test-wise deleted data
   ind_r_xys = get_ind_r_xys(corr_ind, suffStat)
@@ -1023,13 +1046,20 @@ compute.weights.continuous<-function(corr_ind, suffStat){
     ind_pa =get_prt_m_xys(c(ind_ri), suffStat) 
     # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
     pa = suffStat$data[,ind_pa]
-    beta = k.weights(pa[ind.twdel], pa[!is.na(pa)])
+    beta = kernel.method(pa[ind.twdel], pa[!is.na(pa)])
     weights = weights * beta
   }
   weights
 }
 
-k.weights <- function (x, x_target){
+kde.weights <- function(x_del,x_full){
+  f_w= approxfun(density(x_full))
+  f_wr= approxfun(density(x_del))
+  beta=f_w(x_del)/f_wr(x_del)
+  beta
+}
+
+kdrw.weights <- function (x, x_target){
   # kernel-based density ratio estimate
   setVariable(matlab, X = x)
   setVariable(matlab, X_target=x_target)
@@ -1046,7 +1076,7 @@ k.weights <- function (x, x_target){
   evaluate(matlab, "[beta_cs EXITFLAG_cs] = betaKMM_improved(X, X_target, width, 0, 0);")
   beta_cs = getVariable(matlab, "beta_cs")
   beta = beta_cs$beta.cs
-  beta = 1/beta
+  beta = beta
 }
 
 PermCCItest <- function(x, y, S, suffStat){
@@ -1091,15 +1121,11 @@ PermCCItest <- function(x, y, S, suffStat){
   suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
   if(length(ind_test)>2){
     pval = gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)
-    print(c(x,y,S))
-    print(pval)
     pval
     
   }
   else{
     pval = gaussCItest(1, 2,c(), suffStat_perm)
-    print(c(x,y,S))
-    print(pval)
     pval
   }
 }
