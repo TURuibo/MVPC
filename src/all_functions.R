@@ -1038,7 +1038,7 @@ k.weights <- function (x, x_target){
   }else if(length(x) > 1500){
     coeff = 0.25
   }else{
-    coeff = 0.5
+    coeff = 0.4
   }
   set.width = paste0("width =",coeff,"* std(X);", sep = "")
   
