@@ -1,0 +1,32 @@
+> mean(shd_td_pc)
+[1] 9.02
+> mean(shd_mvpc_drw)
+[1] 7.56
+> mean(shd_mvpc_permc)
+[1] 3.96
+> mean(shd_ref)
+[1] 2.92
+> mean(shd_pc)
+[1] 2.22
+> 
+> sd(shd_td_pc)
+[1] 3.266965
+> sd(shd_mvpc_drw)
+[1] 3.529236
+> sd(shd_mvpc_permc)
+[1] 3.225915
+> sd(shd_ref)
+[1] 2.345991
+> sd(shd_pc)
+[1] 1.798979
+> 
+> compute_rp(rp_td_pc)
+[1] 0.86879216 0.06558026 0.93810463 0.05148611
+> compute_rp(rp_mvpc_permc)
+[1] 0.98910026 0.02376230 0.93723507 0.05347906
+> compute_rp(rp_mvpc_drw)
+[1] 0.93949255 0.05322526 0.87695283 0.06380968
+> compute_rp(rp_ref)
+[1] 0.98274781 0.03145768 0.96537169 0.04382056
+> compute_rp(rp_pc)
+[1] 0.98265962 0.02844564 0.97145676 0.03766809

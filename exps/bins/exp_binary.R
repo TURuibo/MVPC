@@ -42,7 +42,7 @@ for(i_g in 1:10){
     cldr_prt <- detect_colliders_prt(DAG, cldr)
     # Choose missingness inidcator and their parents
 
-    # p_m <- create_mar_ind(cldr,cldr_prt)
+    p_m <- create_mar_ind(cldr,cldr_prt)
     p_m <- create_mnar_ind(cldr,cldr_prt)
     ms = p_m$ms
     prt_ms = p_m$prt_ms
@@ -69,7 +69,7 @@ for(i_g in 1:10){
     prt_m[['prt']]<-prt
     ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
-    res_mvpc_permc<-mvpc(suffStat, binCItest_td, binCItest.permc,prt_m, alpha=0.05, p=20)
+    res_mvpc_permc<-mvpc(suffStat, binCItest_td, binCItest.permc, prt_m, alpha=0.05, p=20)
 
     ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
@@ -123,4 +123,5 @@ compute_rp(rp_mvpc_permc)
 compute_rp(rp_mvpc_drw)
 compute_rp(rp_ref)
 compute_rp(rp_pc)
+
 

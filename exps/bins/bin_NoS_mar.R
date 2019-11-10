@@ -25,7 +25,7 @@ r_ref = list()
 r_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-n_sp = c(500, 1000, 5000, 10000, 50000,100000)
+n_sp = c(500, 1000, 5000, 10000, 50000, 100000)
 count = 1
 for(sz in n_sp){
   shd_mvpc_permc = c()
@@ -62,9 +62,9 @@ for(sz in n_sp){
     
     # p_m <- create_mar_ind(cldr,cldr_prt)
     p_m <- create_mar_ind(cldr,cldr_prt,
-                           num_var=20, 
-                           num_extra_e=5, 
-                           num_m = 10) 
+                          num_var=20, 
+                          num_extra_e=5, 
+                          num_m = 10) 
     
     p_m <- create_mnar_ind(cldr,cldr_prt,
                            num_var=20, 
@@ -129,7 +129,7 @@ for(sz in n_sp){
     
     rp_pc[[i_ind]] = test_adj(res_pc,CPDAG)
     rp_td_pc[[i_ind]]=  test_adj(res_td_pc,CPDAG)
-
+    
   }
   
   td_pc[[count]] = mean(shd_td_pc)

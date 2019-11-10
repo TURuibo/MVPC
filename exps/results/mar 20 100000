@@ -1,0 +1,41 @@
+mean(shd_td_pc)
+12.26
+mean(shd_mvpc_drw)
+6.16
+mean(shd_mvpc_permc)
+1.9
+mean(shd_ref)
+1.26
+mean(shd_pc)
+0.94
+ 
+sd(shd_td_pc)
+3.794787
+sd(shd_mvpc_drw)
+2.809314
+sd(shd_mvpc_permc)
+2.159459
+sd(shd_ref)
+1.935807
+sd(shd_pc)
+1.658743
+
+compute_rp(rp_td_pc)
+0.78665108 0.07186036 
+0.96774021 0.03867571
+
+compute_rp(rp_mvpc_permc)
+0.99301829 0.01706711 
+0.96774021 0.03867571
+
+compute_rp(rp_mvpc_drw)
+0.91056356 0.05247168 
+0.95494094 0.04975764
+
+compute_rp(rp_ref)
+0.98717633 0.02567139 
+0.98321255 0.03080424
+
+compute_rp(rp_pc)
+0.99088291 0.01888973 
+0.98393174 0.03083364

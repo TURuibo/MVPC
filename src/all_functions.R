@@ -21,10 +21,12 @@ gen_m_prt <- function(DAG, mode='mar',
   if(mode=='mar'){
     p_m <- create_mar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
   }
-  else{
+  else if(mode == 'mnar'){
     p_m <- create_mnar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
+  }else{
+    p_m <- create_mul_mar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
   }
-
+  
   ms = p_m$ms
   prt_ms = p_m$prt_ms
   return(list(ms = ms, prt_ms=prt_ms))
@@ -36,7 +38,7 @@ gen_data <- function(num_sample,
                      num_extra_e=3, 
                      num_m = 6, 
                      seed=1000,
-                     p_missing_h=0.9, p_missing_l=0.01){
+                     p_missing_h=0.9, p_missing_l=0.1){
   # p: number of variables 
   # n: data sample size
   # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
@@ -49,7 +51,6 @@ gen_data <- function(num_sample,
   
   set.seed(seed) # one seed has a corresponding random graph (seed controls the graph)
   myDAG <- randomDAG(num_var,2/(num_var-1))
-  
   # Make sure the collider is the cause of R-variable of its parent variable
   data_del <-gen_del(num_sample, myDAG, mode, 
                      num_m=num_m, 
@@ -125,8 +126,6 @@ generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind, p_missing_h=0.
     # Choose lower "bottom_p" percentage of the values
     bottom_p <- runif(1, min = 0.1, max = 0.7)
     r <- mis_cal_ind(data[,parent_m_ind[i]], qnorm(bottom_p), p_missing_h, p_missing_l)
-    
-    # r <- data[,parent_m_ind[i]] < qnorm(bottom_p)
     data_m[r, m_ind[i]] = NA
     r_mcar<-sample(r)
     data_mcar[r_mcar, m_ind[i]] = NA
@@ -170,7 +169,7 @@ create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   prt_ms = c()
   ms = c()
   count = 1
-  
+  ## Create MAR 
   for(i in 1:length(cldr)){
     for(pr in cldr_prt[[i]]){
       if(length(ms) == 0){
@@ -179,7 +178,7 @@ create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
         count = count + 1
       }
       else{
-        if((pr !=cldr[i]) && (! (pr %in% ms))){
+        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
           ms[count] = pr
           prt_ms[count] = cldr[i]
           count = count + 1
@@ -188,32 +187,41 @@ create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
     }
   }
   
+  # Only involve "num_extra_e" number of colliders
   if(count > (num_extra_e+1)){
     ind_cld = sample(1:length(ms))
-    ms = ms[ind_cld]
-    prt_ms = prt_ms[ind_cld]
+    ms = ms[ind_cld[1:num_extra_e]]
+    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
     count = (num_extra_e+1)
   }
+  
+  # Add MCAR over MAR for generating MNAR
+  
   ind_rd = count
-  left_ind = setdiff(1:num_var, ms)
-  left_ind = sample(left_ind)
-  if(floor(length(left_ind)/2)<2){  # Check the number of MCAR missingness indicators
-    return(list(ms = ms, prt_ms=prt_ms))  
-  }
-  else{
-    for(i in 1:floor(length(left_ind)/2)){
-      ms[count] = left_ind[i]
-      prt_ms[count] = left_ind[floor(length(left_ind)/2)+i]
-      count = count + 1
-    }
-    ms_ = ms[1:(ind_rd-1)]
-    prt_ms_=prt_ms[1:(ind_rd-1)]
-    ind = sample(ind_rd:length(ms))
-    ms_[ind_rd:num_m] = ms[ind_rd:num_m]
-    prt_ms_[ind_rd:num_m]=prt_ms[ind_rd:num_m]
-    return(list(ms = ms_, prt_ms=prt_ms_))  
+  # Start from missingness indicators
+  left_ind_prt = setdiff(1:num_var, prt_ms) # The parent can be a collider again.
+  left_ind_prt = setdiff(left_ind_prt, ms)   # MNAR: one parent of a missingness indictor
+  left_ind_prt = sample(left_ind_prt) 
+  end_for = num_m - length(ms)
+  
+  countm = count
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    if(!(i > num_extra_e)){ms[countm] = prt_ms[i]}
+    else{ms[countm] = left_ind_prt[i]}
+    countm = countm + 1
   }
   
+  countp = count
+  left_ind_prt = setdiff(1:num_var, cldr)
+  for(i in 1:end_for){
+    # Append missingness indicator not self-masking
+    not_self_masking = sample(setdiff(left_ind_prt, ms[countp]))[1]
+    prt_ms[countp] = not_self_masking
+    countp = countp + 1
+  }
+  
+  return(list(ms = ms, prt_ms=prt_ms))   
 }
 
 create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
@@ -247,41 +255,97 @@ create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
   }
   
   ind_rd = count
-  left_ind_prt = setdiff(1:num_var, cldr)
+  left_ind_prt = 1:num_var  # The parent can be a collider again.
   left_ind_prt = setdiff(left_ind_prt, ms)
   left_ind_prt = setdiff(left_ind_prt, prt_ms)
-  if(length(left_ind_prt)==0){
-    return(list(ms = ms, prt_ms=prt_ms))  
+  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
+
+  end_for = num_m - length(ms)
+  countp = count
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    prt_ms[countp] = left_ind_prt[i]
+    countp = countp + 1
   }
-  else{
-    left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
-    
-    if(length(left_ind_prt) < (num_m - length(ms))){
-      end_for = length(left_ind_prt)
-    }else{
-      end_for = num_m - length(ms)
-    }
-    
-    countp = count
-    for(i in 1:end_for){
-      # Append prt not MAR, i.e., not collider
-      prt_ms[countp] = left_ind_prt[i]
-      countp = countp + 1
-    }
-    
-    left_ind_m = setdiff(1:num_var, ms) 
-    left_ind_m = setdiff(left_ind_m, prt_ms)
-    left_ind_m = sample(left_ind_m)
-    countm = count
-    
-    for(i in 1:end_for){
-      # Append prt not MAR, i.e., not collider
-      ms[countm] = left_ind_m[i]
-      countm = countm + 1
-    }
-    
-    return(list(ms = ms, prt_ms=prt_ms))   
+  
+  left_ind_m = setdiff(1:num_var, ms) 
+  left_ind_m = setdiff(left_ind_m, prt_ms)
+  left_ind_m = sample(left_ind_m)
+  countm = count
+  
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    ms[countm] = left_ind_m[i]
+    countm = countm + 1
   }
+  
+  return(list(ms = ms, prt_ms=prt_ms))   
+  
+}
+
+create_mul_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
+  prt_ms = c()
+  ms = c()
+  count = 1
+  
+  for(i in 1:length(cldr)){
+    for(pr in cldr_prt[[i]]){
+      if(length(ms) == 0){
+        ms[count] = pr
+        prt_ms[count] = cldr[i]
+        count = count + 1
+      }
+      else{
+        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
+          ms[count] = pr
+          prt_ms[count] = cldr[i]
+          count = count + 1
+        }
+      }
+    }
+  }
+  
+  # Only involve "num_extra_e" number of colliders
+  if(count > (num_extra_e+1)){
+    ind_cld = sample(1:length(ms))
+    ms = ms[ind_cld[1:num_extra_e]]
+    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
+    count = (num_extra_e+1)
+  }
+  
+  ind_rd = count
+  left_ind_prt = 1:num_var  # The parent can be a collider again.
+  left_ind_prt = setdiff(left_ind_prt, ms)
+  left_ind_prt = setdiff(left_ind_prt, prt_ms)
+  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
+  
+  end_for = num_m - length(ms)
+  countp = count
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    prt_ms[countp] = left_ind_prt[i]
+    countp = countp + 1
+  }
+  
+  left_ind_m = setdiff(1:num_var, ms) 
+  left_ind_m = setdiff(left_ind_m, prt_ms)
+  left_ind_m = sample(left_ind_m)
+  countm = count
+  
+  for(i in 1:end_for){
+    # Append prt not MAR, i.e., not collider
+    if(i < count){
+      ms[countm] = ms[i]  # repeat the missingness indicator to generate multiple cause
+    }
+    else{
+      ms[countm] = left_ind_m[i]    
+    }
+    countm = countm + 1
+  }
+  
+  return(list(ms = ms, prt_ms=prt_ms))   
+  #  [m1, m2, m3, m1, m2, m3] 
+  #  [prt[1], prt[2], prt[3],prt[4], prt[5], prt[6]]
 }
 
 load_bin_data<-function(fdata){
@@ -496,13 +560,17 @@ compute_weights<- function(x, y, S, suffStat){
   ind_test <- c(x, y, S)
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(weights)}
+ 
+  pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+  candi_W <- setdiff(pa_W, ind_W)
   
-  checkW <- ind_W
-  while(length(pa_W <- get_prt_m_xys(checkW, suffStat)) > 0){
-    ind_W <- c(ind_W, pa_W) # Get parents the W missingness indicators
-    checkW = pa_W
+  while(length(candi_W) > 0  ){
+    ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
+    pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+    candi_W <- setdiff(pa_W, ind_W)
   } 
   ind_W <- unique(ind_W)
+  
   # Get ri and corresponding wi
   rw = get_rw_pair(x,y,S,ind_W,suffStat)
   # Get the weights check table weights <==> W
@@ -1034,7 +1102,6 @@ gaussCItest_td <- function(x, y, S, suffStat) {
   gaussCItest(x, y, S, suffStat)
 }
 
-
 gaussCItest.drw <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
@@ -1048,10 +1115,13 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
   
-  checkW <- ind_W
-  while(length(pa_W <- get_prt_m_xys(checkW, suffStat)) > 0){
-    ind_W <- c(ind_W, pa_W) # Get parents the W missingness indicators
-    checkW = pa_W
+  pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+  candi_W <- setdiff(pa_W, ind_W)
+  
+  while(length(candi_W) > 0  ){
+    ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
+    pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+    candi_W <- setdiff(pa_W, ind_W)
   } 
   ind_W <- unique(ind_W)
   
@@ -1071,7 +1141,8 @@ compute.weights.continuous<-function(corr_ind, suffStat, kernel.method = kde.wei
   ind_r_xys = get_ind_r_xys(corr_ind, suffStat)
   
   for(ind_ri in ind_r_xys){
-    ind_pa =get_prt_m_xys(c(ind_ri), suffStat) 
+    ind_pa = get_prt_i(ind_ri,suffStat)
+    # ind_pa =get_prt_m_xys(c(ind_ri), suffStat) 
     # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
     pa = suffStat$data[,ind_pa]
     beta = kernel.method(pa[ind.twdel], pa[!is.na(pa)])
@@ -1864,3 +1935,17 @@ compute_rp<-function(rp_){
   return(c(mean(recall), sd(recall), mean(precision),sd(precision)))
 }
 
+compute_f1<-function(rp_){
+  recall = c()
+  precision = c()
+  f1 = c()
+  count = 1
+  for(i in 1:length(rp_)){
+    if(i == 6 | i ==12 | i==18 | i==24){next}
+    recall[count] = rp_[[i]]$recall
+    precision[count] = rp_[[i]]$precision
+    f1[count] = 2 * ( recall[count] * precision[count])/( recall[count] + precision[count])
+    count = count + 1
+  }
+  return(c(mean(f1), sd(f1)))
+}

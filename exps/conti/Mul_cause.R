@@ -5,7 +5,6 @@ data_path<-paste(proj_path,'/data',sep="")
 
 source(paste(src_path,'/all_functions.R',sep=""))
 
-set.seed(777)
 shd_mvpc_permc = c()
 shd_mvpc_drw = c()
 
@@ -22,14 +21,26 @@ rp_td_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
 num_var=20
-num_sample = 10000
+num_sample = 50000
+count = 1
 
-for(graph_ind in 1:50){
-  print(paste('graph=', graph_ind))
+print(paste('num_sample: ', num_sample))
+shd_mvpc_permc = c()
+shd_mvpc_drw = c()
+shd_ref = c()
+shd_pc = c()
+shd_td_pc = c()
+rp_mvpc_drw = list()
+rp_mvpc_permc = list()
+rp_ref = list()
+rp_pc = list()
+rp_td_pc = list()
+for(graph_ind in 1:10){
+  print(graph_ind)
   gen_result_list<-gen_data(num_sample = num_sample, 
-                            mode = "mnar",
+                            mode = "mul_mar",
                             num_var=num_var, 
-                            num_extra_e=6, 
+                            num_extra_e=5, 
                             num_m = 10, 
                             seed = graph_ind)
   
@@ -38,16 +49,15 @@ for(graph_ind in 1:50){
   myCPDAG = gen_result_list$ground_truth$cpdag
   prt = gen_result_list$ground_truth$parent_m_ind
   m = gen_result_list$ground_truth$m_ind
+  m_u = unique(m)
+  prt_m <- data.frame(m=m_u)
+  prt_m['prt'] = list()
   
-  prt_m<-data.frame(m=m)
-  prt1 = list()
-  for(i in 1:length(prt)){
-    prt1[[i]] = c(prt[i])
+  for(i in 1:length(m_u)){
+    prt_m[['prt']][[i]] = c(prt[m==m_u[i]])
   }
-  prt_m[['prt']]<-prt1
   
-    
-  suffStat_m <- list(data=data_m,prt_m=prt_m)
+  suffStat_m <- list(data=data_m, prt_m=prt_m)
   suffStat  = list(C = cor(data_complete),n=num_sample)
   
   ## ********* PermC Correction *********
@@ -75,6 +85,7 @@ for(graph_ind in 1:50){
   res.ref<-pc(suffStat_ref, gaussCItest, alpha=0.01, p=num_var)
   
   i_ind = graph_ind
+  
   shd_mvpc_permc[i_ind] =shd(res.mvpc.permc,myCPDAG)
   shd_mvpc_drw[i_ind] =shd(res.mvpc.drw,myCPDAG)
   shd_ref[i_ind] =shd(res.ref,myCPDAG)
@@ -87,23 +98,15 @@ for(graph_ind in 1:50){
   rp_pc[[i_ind]] = test_adj(res.comp,myCPDAG)
   rp_td_pc[[i_ind]]=  test_adj(res.td,myCPDAG)
 }
+print(c(mean(shd_pc),sd(shd_pc)))
+print(c(mean(shd_ref),sd(shd_ref)))
+print(c(mean(shd_mvpc_permc),sd(shd_mvpc_permc)))
+print(c(mean(shd_mvpc_drw),sd(shd_mvpc_permc)))
+print(c(mean(shd_td_pc),sd(shd_td_pc)))
 
-
-mean(shd_td_pc)
-mean(shd_mvpc_drw)
-mean(shd_mvpc_permc)
-mean(shd_ref)
-mean(shd_pc)
-
-sd(shd_td_pc)
-sd(shd_mvpc_drw)
-sd(shd_mvpc_permc)
-sd(shd_ref)
-sd(shd_pc)
-
-compute_rp(rp_td_pc)
-compute_rp(rp_mvpc_permc)
-compute_rp(rp_mvpc_drw)
-compute_rp(rp_ref)
-compute_rp(rp_pc)
+print(compute_f1(rp_pc))
+print(compute_f1(rp_ref))
+print(compute_f1(rp_mvpc_permc))
+print(compute_f1(rp_mvpc_drw))
+print(compute_f1(rp_td_pc))
 
