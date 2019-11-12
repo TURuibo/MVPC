@@ -447,12 +447,10 @@ binCItest.permc<- function(x, y, S, suffStat){
       ## Step4: Test with the virtual data set
       if(length(S) > 0){
         pval = binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))
-        # cat(paste(x,y,S,pval,"\n"),file="output_permc.txt",append=TRUE)
         pval
         }
       else{
         pval = binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))
-        # cat(paste(x,y,S,pval,"\n"),file="output_permc.txt",append=TRUE)
         pval
         }
     },
@@ -474,16 +472,13 @@ binCItest.drw <- function(x, y, S, suffStat){
   weights = del_res$weights
   if(length(S)>0){
     pval = binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
-    # cat(paste(x,y,S,pval,"\n"),file="output_drw.txt",append=TRUE)
     pval
     
   }
   else{
     pval = binCItest_w(1, 2, c(), weights, list(dm = data[,test_ind], adaptDF = FALSE))
-    # cat(paste(x,y,S,pval,"\n"),file="output_drw.txt",append=TRUE)
     pval
   }
-  
 }
 
 binCItest_td_ref<- function(x, y, S, suffStat){
@@ -501,7 +496,6 @@ binCItest_td_ref<- function(x, y, S, suffStat){
 binCItest_td <- function(x, y, S, suffStat){
   test_ind = c(x,y,S)
   data = test_wise_deletion(test_ind,suffStat$data)
-  # sample_size <<- c(sample_size,length(data[,1]))
   if(length(S)>0){
     binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
   }
@@ -1145,7 +1139,6 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   suffStat$C = wtd.cors(tw_data, tw_data, weights)
   suffStat$n = length(weights)
   gaussCItest(x, y, S,suffStat)
-
 }
 
 compute.weights.continuous<-function(corr_ind, suffStat, kernel.method = kde.weights){
@@ -1219,7 +1212,6 @@ PermCCItest <- function(x, y, S, suffStat){
     data[, i] = data_W_p[1:length(data[,1]),i-length(ind_test)]  
   }
   
-  
   ## Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
   vir <- list()
   for(i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
@@ -1234,7 +1226,6 @@ PermCCItest <- function(x, y, S, suffStat){
   if(length(ind_test)>2){
     pval = gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)
     pval
-    
   }
   else{
     pval = gaussCItest(1, 2,c(), suffStat_perm)
