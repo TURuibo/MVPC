@@ -5,7 +5,9 @@
 .DS_Store
 *.Rproj
 /test
-/data
+/data/*.txt
+/data/*.tet
+/data/*.csv
 /src/KCI-test
 *.class
 MatlabServer.m
