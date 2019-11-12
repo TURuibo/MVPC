@@ -387,7 +387,6 @@ initialize.rmatlab<-function(){
 
 #****************** (Conditional) Independence Test ****************** 
 binCItest.permc<- function(x, y, S, suffStat){  
-  # print(c(x,y,S))
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
   tryCatch(
     {
@@ -446,8 +445,16 @@ binCItest.permc<- function(x, y, S, suffStat){
       }
       
       ## Step4: Test with the virtual data set
-      if(length(S) > 0){binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))}
-      else{binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))}
+      if(length(S) > 0){
+        pval = binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))
+        # cat(paste(x,y,S,pval,"\n"),file="output_permc.txt",append=TRUE)
+        pval
+        }
+      else{
+        pval = binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))
+        # cat(paste(x,y,S,pval,"\n"),file="output_permc.txt",append=TRUE)
+        pval
+        }
     },
     error=function(cond) {
       message(cond)
@@ -458,6 +465,7 @@ binCItest.permc<- function(x, y, S, suffStat){
 }  
 
 binCItest.drw <- function(x, y, S, suffStat){
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
   weights_ = compute_weights(x, y, S, suffStat)
   test_ind = c(x,y,S)
   del_res = test_wise_deletion_w(test_ind,suffStat$data, weights_)
@@ -465,10 +473,15 @@ binCItest.drw <- function(x, y, S, suffStat){
   data = del_res$data
   weights = del_res$weights
   if(length(S)>0){
-    binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
+    pval = binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
+    # cat(paste(x,y,S,pval,"\n"),file="output_drw.txt",append=TRUE)
+    pval
+    
   }
   else{
-    binCItest_w(1, 2, c(),weights, list(dm = data[,test_ind], adaptDF = FALSE))
+    pval = binCItest_w(1, 2, c(), weights, list(dm = data[,test_ind], adaptDF = FALSE))
+    # cat(paste(x,y,S,pval,"\n"),file="output_drw.txt",append=TRUE)
+    pval
   }
   
 }
@@ -522,7 +535,7 @@ get_rw_pair<-function(x,y,S,ind_W,suffStat){
   rw <- list(r=c(),w=list())
   
   count = 1
-  for(ri in c(x,y,S,ind_W)){
+  for(ri in unique(c(x,y,S,ind_W))){
     wi <- get_prt_m_xys(ri, suffStat)
     if(length(wi)!=0){
       rw$r[count] = ri
@@ -555,22 +568,22 @@ compute_weights<- function(x, y, S, suffStat){
   data = suffStat$data
   n.sample = dim(data)[1]
   weights = rep(1, n.sample)
-  
+
   # Detection of parents of missingness indicators
   ind_test <- c(x, y, S)
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(weights)}
- 
+
   pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
   candi_W <- setdiff(pa_W, ind_W)
-  
+
   while(length(candi_W) > 0  ){
     ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
     pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
     candi_W <- setdiff(pa_W, ind_W)
-  } 
+  }
   ind_W <- unique(ind_W)
-  
+
   # Get ri and corresponding wi
   rw = get_rw_pair(x,y,S,ind_W,suffStat)
   # Get the weights check table weights <==> W
@@ -582,15 +595,15 @@ compute_weights<- function(x, y, S, suffStat){
     W = data[,ind_W]
   }
   else{
-    W = matrix(data = data[,ind_W], nrow = n.sample)  
+    W = matrix(data = data[,ind_W], nrow = n.sample)
   }
-  
   for(i in 1: dim(comb.W)[1]){
     ind = rep(TRUE, n.sample)
     for(j in 1:dim(comb.W)[2]){
       ind = (W[,j] == comb.W[i,j]) & ind
     }
     weights[ind] =  weights_tab[i] 
+    weights[is.na(ind)] = NA
   }
   return(weights)
 }

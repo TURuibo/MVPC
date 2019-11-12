@@ -5,7 +5,7 @@ data_path<-paste(proj_path,'/data',sep="")
 
 source(paste(src_path,'/all_functions.R',sep=""))
 
-set.seed(777)
+set.seed(100)
 td_pc = list()
 mvpc_drw = list()
 mvpc_permc = list()
@@ -25,7 +25,7 @@ r_ref = list()
 r_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-n_sp = c(500, 1000, 5000, 10000, 50000, 100000)
+n_sp = c(10000)
 count = 1
 for(sz in n_sp){
   shd_mvpc_permc = c()
@@ -60,13 +60,8 @@ for(sz in n_sp){
     cldr_prt <- detect_colliders_prt(DAG, cldr)
     # Choose missingness inidcator and their parents
     
-    # p_m <- create_mar_ind(cldr,cldr_prt)
-    p_m <- create_mar_ind(cldr,cldr_prt,
-                          num_var=20, 
-                          num_extra_e=5, 
-                          num_m = 10) 
     
-    p_m <- create_mnar_ind(cldr,cldr_prt,
+    p_m <- create_mar_ind(cldr,cldr_prt,
                            num_var=20, 
                            num_extra_e=5, 
                            num_m = 10) 
@@ -78,10 +73,9 @@ for(sz in n_sp){
     
     for(i in 1:length(ms)){
       nsample = nrow(data)
-      p_1 = runif(1,0.1,0.5)
-      m_ind = rbinom(nsample, 1, p_1)==1
-      m_ind = (data[,prt_ms[i]] == 1) & m_ind
-      mask[,ms[i]] = m_ind
+      pr1 <- plogis(2*data[,prt_ms[i]]-0.5); 
+      r <- rbinom(nsample, 1, prob = pr1)==1
+      mask[,ms[i]] = r
     }
     data_m = data
     data_m[mask] = NA
@@ -162,8 +156,6 @@ for(sz in n_sp){
   cat(paste(compute_f1(rp_mvpc_permc),"\n"),file="output.txt",append=TRUE)
   cat(paste(compute_f1(rp_mvpc_drw),"\n"),file="output.txt",append=TRUE)
   cat(paste(compute_f1(rp_td_pc),"\n"),file="output.txt",append=TRUE)
-  
-  
   
 }
 
