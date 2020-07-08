@@ -19,8 +19,6 @@ rp_ref = list()
 rp_pc = list()
 rp_td_pc = list()
 
-## ********* Synthethic Binary Data Generation ********* 
-
 num_var_ls = c(20, 50, 100)
 nun_m_ls = c(10, 16, 20 )
 num_ex_ls = c(5, 8,  10)
@@ -40,6 +38,7 @@ for(ind_ls in 1:3){
   rp_pc = list()
   rp_td_pc = list()
   for(graph_ind in 7:10){
+    ## ********* Synthethic Data Generation ********* 
     print(graph_ind)
     gen_result_list<-gen_data(num_sample = num_sample, 
                               mode = "mnar",

@@ -24,12 +24,13 @@ rp_td_pc = list()
 num_var=20
 num_sample = 10000
 
-for(graph_ind in 1:50){
+# for(graph_ind in 1:50){
+for(graph_ind in 1:5){
   print(paste('graph=', graph_ind))
   gen_result_list<-gen_data(num_sample = num_sample, 
                             mode = "mnar",
                             num_var=num_var, 
-                            num_extra_e=6, 
+                            num_extra_e=5, 
                             num_m = 10, 
                             seed = graph_ind)
   
@@ -38,36 +39,37 @@ for(graph_ind in 1:50){
   myCPDAG = gen_result_list$ground_truth$cpdag
   prt = gen_result_list$ground_truth$parent_m_ind
   m = gen_result_list$ground_truth$m_ind
-  
-  prt_m<-data.frame(m=m)
-  prt1 = list()
-  for(i in 1:length(prt)){
-    prt1[[i]] = c(prt[i])
-  }
-  prt_m[['prt']]<-prt1
-  
-    
-  suffStat_m <- list(data=data_m,prt_m=prt_m)
+  suffStat_m <- list(data=data_m)
   suffStat  = list(C = cor(data_complete),n=num_sample)
+  prt_m<-get_prt_m_ind(data=suffStat_m$data, gaussCItest_td, 0.01, num_var) # "suffStat$data" is "data_m" which containing missing values.
   
   ## ********* PermC Correction *********
   res.mvpc.permc <-mvpc(suffStat_m,
-                        gaussCItest_td, PermCCItest,
-                        prt_m=prt_m, alpha=0.01, p=num_var)
+                        gaussCItest.td, 
+                        gaussCItest.PermC,
+                        alpha=0.01, 
+                        p=num_var)
   
   ## ********* DRW Correction *********
   res.mvpc.drw <-mvpc(suffStat_m,
-                      gaussCItest_td,
+                      gaussCItest.td,
                       gaussCItest.drw,
-                      prt_m=prt_m, alpha=0.01, p=num_var)
+                      alpha=0.01, 
+                      p=num_var)
   
   ## ********* Complete data evaluation *********
-  res.comp<-pc(suffStat, gaussCItest, alpha=0.01, p=num_var)
+  res.comp<-pc(suffStat, 
+               gaussCItest, 
+               alpha=0.01, 
+               p=num_var)
   
   ## ********* Test-Wise Deletion *********
   sample_size <<- c()
   suffStat_tw = list(data=data_m)
-  res.td<-pc(suffStat_tw, gaussCItest_td_ref, alpha=0.01, p=num_var)
+  res.td<-pc(suffStat_tw, 
+             gaussCItest.td.ref, 
+             alpha=0.01, 
+             p=num_var)
   sample_size <- floor(mean(sample_size))
   
   ## ********* MCAR Complete data evaluation *********

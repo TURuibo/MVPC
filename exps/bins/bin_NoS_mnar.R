@@ -59,10 +59,9 @@ for(i_g in 1:10){
   # Detect colliders and  Colliders' parents
   cldr <- detect_colliders(DAG)
   cldr_prt <- detect_colliders_prt(DAG, cldr)
-  # Choose missingness inidcator and their parents
-
   
-  p_m <- create_mar_ind(cldr,cldr_prt,
+  # Choose missingness inidcator and their parents
+  p_m <- create_mnar_ind(cldr,cldr_prt,
                          num_var=20, 
                          num_extra_e=5, 
                          num_m = 10) 
@@ -71,7 +70,6 @@ for(i_g in 1:10){
   
   # Generate missing values 
   mask = data != data
-  
   for(i in 1:length(ms)){
     nsample = nrow(data)
     pr1 <- plogis(2*data[,prt_ms[i]]-0.5); 

@@ -115,7 +115,6 @@ gen_del <- function(n,myDAG,mode='mar',
               m_ind=prt_m$ms)) 
 }
 
-
 generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind, p_missing_h=0.9, p_missing_l=0.01){
   # Give the parents of missingness indicators, and the missingness indcators
   # The missing values are generated whn the parent values are in the bottom XX percentage.
@@ -163,6 +162,18 @@ detect_colliders_prt <- function(DAG, cldr){
     count = count + 1 
   }
   cldr_prt
+}
+
+prtm.groundtrue <- function(m,prt){
+  # get ground-true missingess parents
+  # return prt_m as a data.frame for mvpc
+  prt_m<-data.frame(m=m)
+  prt1 = list()
+  for(i in 1:length(prt)){
+    prt1[[i]] = c(prt[i])
+  }
+  prt_m[['prt']]<-prt1
+  return(prt_m)
 }
 
 create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
@@ -386,6 +397,50 @@ initialize.rmatlab<-function(){
 # #************ END: set up the environment of R.Matlab ************  
 
 #****************** (Conditional) Independence Test ****************** 
+gaussCItest.td.ref <- function(x, y, S, suffStat){
+  return(gaussCItest_td_ref(x, y, S, suffStat))  
+}
+
+gaussCItest.td <- function(x, y, S, suffStat){
+  return(gaussCItest_td(x, y, S, suffStat))
+}
+
+gaussCItest.drw <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  # Note that "tw_data" and "weights" should have the same order/index
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  
+  ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
+  if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
+  
+  pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+  candi_W <- setdiff(pa_W, ind_W)
+  
+  while(length(candi_W) > 0  ){
+    ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
+    pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+    candi_W <- setdiff(pa_W, ind_W)
+  } 
+  ind_W <- unique(ind_W)
+  
+  corr_ind = c(x,y,S,ind_W)
+  tw_data = test_wise_deletion(corr_ind, suffStat$data) # Fixed bug: The same number of variables as the orginal dataset
+  weights = compute.weights.continuous(corr_ind, suffStat)
+  
+  suffStat$C = wtd.cors(tw_data, tw_data, weights)
+  suffStat$n = length(weights)
+  gaussCItest(x, y, S,suffStat)
+}
+
+gaussCItest.PermC <- function(x, y, S, suffStat){
+  return(PermCCItest(x, y, S, suffStat))
+}
+
 binCItest.permc<- function(x, y, S, suffStat){  
   if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
   tryCatch(
@@ -1077,70 +1132,6 @@ gSquareBin.weighted <- function (x, y, S, W, dm, adaptDF = FALSE, n.min = 10 * d
   pchisq(G2, df, lower.tail = FALSE)
 }
 
-gaussCItest_td_ref <- function(x, y, S, suffStat) {
-  ## Conditional independence test between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  
-  data = test_wise_deletion(c(x,y,S),suffStat$data)
-  sample_size <<- c(sample_size,length(data[,1]))
-  
-  suffStat$data = data
-  suffStat$C = cor(data)
-  suffStat$n = length(data[,1])
-  gaussCItest(x, y, S, suffStat)
-}
-
-gaussCItest_td <- function(x, y, S, suffStat) {
-  ## Conditional independence test between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  
-  data = test_wise_deletion(c(x,y,S),suffStat$data)
-  suffStat$data = data
-  suffStat$C = cor(data)
-  suffStat$n = length(data[,1])
-  gaussCItest(x, y, S, suffStat)
-}
-
-gaussCItest.drw <- function(x, y, S, suffStat) {
-  ## Conditional independence test between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  # Note that "tw_data" and "weights" should have the same order/index
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
-  
-  ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
-  if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
-  
-  pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
-  candi_W <- setdiff(pa_W, ind_W)
-  
-  while(length(candi_W) > 0  ){
-    ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
-    pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
-    candi_W <- setdiff(pa_W, ind_W)
-  } 
-  ind_W <- unique(ind_W)
-  
-  corr_ind = c(x,y,S,ind_W)
-  tw_data = test_wise_deletion(corr_ind, suffStat$data) # Fixed bug: The same number of variables as the orginal dataset
-  weights = compute.weights.continuous(corr_ind, suffStat)
- 
-  suffStat$C = wtd.cors(tw_data, tw_data, weights)
-  suffStat$n = length(weights)
-  gaussCItest(x, y, S,suffStat)
-}
-
 compute.weights.continuous<-function(corr_ind, suffStat, kernel.method = kde.weights){
   ind.twdel = indx_test_wise_deletion(corr_ind,suffStat$data)
   weights = rep(1,length(ind.twdel))  # length of test-wise deleted data
@@ -1182,6 +1173,38 @@ kdrw.weights <- function (x, x_target){
   beta_cs = getVariable(matlab, "beta_cs")
   beta = beta_cs$beta.cs
   beta = beta
+}
+
+gaussCItest_td_ref <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
+}
+
+gaussCItest_td <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
 }
 
 PermCCItest <- function(x, y, S, suffStat){
@@ -1232,40 +1255,6 @@ PermCCItest <- function(x, y, S, suffStat){
     pval
   }
 }
-
-DRWCItest <- function(x, y, S, suffStat){
-  
-  # Determine whether the current case satisfies the condition of correction
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
-  
-  # Logistic regression for each missingness indicator (rx, ry, rsi): ri ~ Pa(ri).
-  # Note that data for training the logistic regression are different with the data used for computing weights.
-  ind_r_xys <- get_ind_r_xys(c(x, y, S), suffStat)
-  ind <- get_ind_weights(ind_r_xys,  suffStat)  # ind is a list of logical variable
-  weights = sum(ind)/length(ind)  # "ri = 0" means missing value
-  
-  for(ind_ri in ind_r_xys){
-    logidata <- get_logidata(ind_ri,  suffStat)
-    fmla <- get_logi_formula(length(logidata))
-    logi.fit <- glm(formula = as.formula(fmla), data = logidata, family = binomial)
-    
-    prt_i <- get_prt_i(ind_ri, suffStat)
-    
-    logidata = data.frame(r = 1:length(sum(ind)), prt = suffStat$data[ind,prt_i])
-    logi.prob = predict(logi.fit, logidata, type = "response")  
-    # TODO: check what if the name of the column is different with the formula
-    # it should have the same name with the formula
-    # it follow the formula slicing way when input the same name with formula
-    weights = weights * (1/logi.prob)
-  }
-  
-  # Weighted the correlation
-  data_td <- suffStat$data[ind,]
-  suffStat_drw  = list(C=wtd.cors(data_td,data_td,weights), n=length(weights))
-  gaussCItest(x, y, S, suffStat_drw)
-  
-}  
-# Logistic regression is not general enough for estimate the ratio, thus waiting for density ratio estimate
 
 iscorr<- function(x, y, S, suffStat){
   return(TRUE)
@@ -1562,11 +1551,15 @@ skeleton2 <- function (suffStat, indepTest, alpha, labels, p,skel_pre,
 }
 
 
-mvpc<-function(suffStat, indepTest,corrMethod,prt_m, alpha, labels, p,
+mvpc<-function(suffStat, indepTest,corrMethod,alpha, labels, p,
+               prt_m = NULL,
                fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
                u2pd = c("relaxed", "rand", "retry"),
                skel.method = c("stable", "original", "stable.fast"),
                conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
+  # prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
+  #   prt_m$m: a list of the missingness indicators.
+  #   prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
   # Test-wise skeleton search result as initialization for detection. 
   # The initialization of skeleton doesnot save that much time for the detection of parents of missingness inidicators. 
   # e.g.:100 000 data points, the time difference is within 1 second.
@@ -1575,8 +1568,7 @@ mvpc<-function(suffStat, indepTest,corrMethod,prt_m, alpha, labels, p,
   # skel.gaps= graph2gaps(skel.ini_)
   
   ## MVPC step1: Detect parents of missingness indicators.
-  # prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  # print(prt_m)
+  prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
   suffStat$prt_m = prt_m
   ## MVPC step2:
   # a) Run PC algorithm with the 1st step skeleton;
@@ -1668,7 +1660,11 @@ get_prt_m_ind <- function(data, indepTest, alpha, p, fixedGaps = NULL){
   ## data:
   ## mode: the best is Anova test to test the conditional independence (the test for continuous variables also works)
   ## ---------------------------
-  ## Return: the index of parents of missingness indicators
+  ## Return: the missingness indicator and their parents as a dataframe prt_m for mvpc
+  #   prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
+  #     prt_m$m: a list of the missingness indicators.
+  #     prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
+  
   R<-get_m_ind(data)
   m=c()
   prt=list()
