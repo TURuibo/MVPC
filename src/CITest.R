@@ -1,401 +1,3 @@
-library(pcalg)
-library(mvtnorm)
-library(weights)
-library(ks)
-library(e1071)  # For generating all combinations of a binary vector
-library(weights)  # For kernel density estimate
-library(ks)
-
-library(DescTools)
-library(mipfp)
-#******************Functions for Synthetic Data Generation******************
-gen_m_prt <- function(DAG, mode='mar',
-                      num_var=20, 
-                      num_extra_e=3, 
-                      num_m = 6){
-  # Given a DAG, return a list of missingness indicators and their parents
-  
-  cldr <- detect_colliders(DAG)
-  cldr_prt <- detect_colliders_prt(DAG, cldr)
-  # Choose missingness inidcator and their parents
-  if(mode=='mar'){
-    p_m <- create_mar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
-  }
-  else if(mode == 'mnar'){
-    p_m <- create_mnar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
-  }else{
-    p_m <- create_mul_mar_ind(cldr,cldr_prt,num_var, num_extra_e, num_m)
-  }
-  
-  ms = p_m$ms
-  prt_ms = p_m$prt_ms
-  return(list(ms = ms, prt_ms=prt_ms))
-}
-
-gen_data <- function(num_sample,
-                     mode='mar',
-                     num_var=20, 
-                     num_extra_e=3, 
-                     num_m = 6, 
-                     seed=1000,
-                     p_missing_h=0.9, p_missing_l=0.1){
-  # p: number of variables 
-  # n: data sample size
-  # mode: different methods to generate data sets with different missingness mechanisms, such as MCAR, MAR and MNAR
-  # **************
-  # Return: 
-  # data_complete: the complete data set
-  # data_m: the data set containing missing values that generated with mode function
-  # data_ref: the MCAR data set as reference 
-  # ground_truth: the ground-true DAG, CPDAG, 
-  
-  set.seed(seed) # one seed has a corresponding random graph (seed controls the graph)
-  myDAG <- randomDAG(num_var,2/(num_var-1))
-  # Make sure the collider is the cause of R-variable of its parent variable
-  data_del <-gen_del(num_sample, myDAG, mode, 
-                     num_m=num_m, 
-                     num_var=num_var, 
-                     num_extra_e =num_extra_e,
-                     p_missing_h, p_missing_l)
-  
-  data_m = data_del$data_m
-  data_complete = data_del$data_complete
-  data_ref <- data.frame(data_del$data_ref)
-  
-  # Also provide reference, a MCAR data set and the ground-truth (DAG, missingness indicator, and parents of the missingness indicators ).
-  ground_truth <- list(
-    dag=myDAG,
-    cpdag=dag2cpdag(myDAG),
-    collider=detect_colliders(myDAG),
-    parent_m_ind=data_del$parent_m_ind,
-    m_ind=data_del$m_ind
-  )
-
-  return(list(data_complete=data_complete,
-              data_m=data_m,
-              data_ref=data_ref,
-              ground_truth=ground_truth))
-}
-
-gen_del <- function(n,myDAG,mode='mar',
-                    num_m=6,
-                    num_var=20, 
-                    num_extra_e=3,
-                    p_missing_h=0.9, p_missing_l=0.01){
-  # Constraint of MAR:
-  # 1. the missingness indicator is caused by some substantive variables;
-  # 2. the parents of missingness indicator have no missing values in the data set.
-  # Constraint of our implememntation:
-  # Here we only choose a single parent for a missingness indicator.
-  # ********************
-  # Constraints of MNAR:
-  # 1. no self-masking: X -> Rx
-  # 2. parents of missingness indicators must also have missing values in the data set.
-  # 3. the limitation of the correction method 
-  # ********************
-  
-  num_samples <- n
-  prt_m = gen_m_prt(myDAG,mode,
-                    num_m=num_m, 
-                    num_var=num_var, 
-                    num_extra_e =num_extra_e )
-  
-  
-  # 3. Generate missing values according the the values of missingness indicators
-  data_com_m_ref = generate_missing_values(num_var,n,myDAG, prt_m$ms, prt_m$prt_ms,
-                                           p_missing_h, p_missing_l)
-  data_m = data_com_m_ref$data_m
-  data_ref = data_com_m_ref$data_ref
-  data_complete = data_com_m_ref$data_complete
-  
-  return(list(data_complete=data_complete,
-              data_m=data_m,
-              data_ref=data_ref,
-              parent_m_ind=prt_m$prt_ms,
-              m_ind=prt_m$ms)) 
-}
-
-generate_missing_values <- function(p,n,myDAG,m_ind,parent_m_ind, p_missing_h=0.9, p_missing_l=0.01){
-  # Give the parents of missingness indicators, and the missingness indcators
-  # The missing values are generated whn the parent values are in the bottom XX percentage.
-  data <- rmvnorm(n, mean=rep(0,p), sigma=trueCov(myDAG))
-  data_m=data
-  data_mcar=data
-  for(i in c(1:length(m_ind))){
-    # Choose lower "bottom_p" percentage of the values
-    bottom_p <- runif(1, min = 0.1, max = 0.7)
-    r <- mis_cal_ind(data[,parent_m_ind[i]], qnorm(bottom_p), p_missing_h, p_missing_l)
-    data_m[r, m_ind[i]] = NA
-    r_mcar<-sample(r)
-    data_mcar[r_mcar, m_ind[i]] = NA
-  }
-  return(list(data_complete=data, 
-              data_m=data_m,
-              data_ref=data_mcar))
-}
-
-mis_cal_ind<-function(x, bottom_p, p_missing_h=0.9, p_missing_l=0.01){
-  ind = x < bottom_p
-  h_x = rbinom(length(x),1,p_missing_h) ==1
-  l_x = rbinom(length(x),1,p_missing_l) ==1
-  out = l_x
-  out[ind] = h_x[ind]
-  out
-} 
-
-detect_colliders <- function(myDAG){
-  m <- as(myDAG,"matrix")
-  m[m>0]<-1
-  ind <- colSums(m,1)>1
-  num_vars<-length(m[,1])
-  x <- c(1:num_vars)
-  x[ind]
-}
-
-detect_colliders_prt <- function(DAG, cldr){
-  m <- as(DAG,"matrix")
-  a = 1:length(m[,1])
-  cldr_prt = list()
-  count = 1
-  for(i in cldr){
-    cldr_prt[[count]]=a[m[,i]>0] # contain the situation where  "== 1"
-    count = count + 1 
-  }
-  cldr_prt
-}
-
-prtm.groundtrue <- function(m,prt){
-  # get ground-true missingess parents
-  # return prt_m as a data.frame for mvpc
-  prt_m<-data.frame(m=m)
-  prt1 = list()
-  for(i in 1:length(prt)){
-    prt1[[i]] = c(prt[i])
-  }
-  prt_m[['prt']]<-prt1
-  return(prt_m)
-}
-
-create_mnar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
-  prt_ms = c()
-  ms = c()
-  count = 1
-  ## Create MAR 
-  for(i in 1:length(cldr)){
-    for(pr in cldr_prt[[i]]){
-      if(length(ms) == 0){
-        ms[count] = pr
-        prt_ms[count] = cldr[i]
-        count = count + 1
-      }
-      else{
-        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
-          ms[count] = pr
-          prt_ms[count] = cldr[i]
-          count = count + 1
-        }
-      }
-    }
-  }
-  
-  # Only involve "num_extra_e" number of colliders
-  if(count > (num_extra_e+1)){
-    ind_cld = sample(1:length(ms))
-    ms = ms[ind_cld[1:num_extra_e]]
-    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
-    count = (num_extra_e+1)
-  }
-  
-  # Add MCAR over MAR for generating MNAR
-  
-  ind_rd = count
-  # Start from missingness indicators
-  left_ind_prt = setdiff(1:num_var, prt_ms) # The parent can be a collider again.
-  left_ind_prt = setdiff(left_ind_prt, ms)   # MNAR: one parent of a missingness indictor
-  left_ind_prt = sample(left_ind_prt) 
-  end_for = num_m - length(ms)
-  
-  countm = count
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    if(!(i > num_extra_e)){ms[countm] = prt_ms[i]}
-    else{ms[countm] = left_ind_prt[i]}
-    countm = countm + 1
-  }
-  
-  countp = count
-  left_ind_prt = setdiff(1:num_var, cldr)
-  for(i in 1:end_for){
-    # Append missingness indicator not self-masking
-    not_self_masking = sample(setdiff(left_ind_prt, ms[countp]))[1]
-    prt_ms[countp] = not_self_masking
-    countp = countp + 1
-  }
-  
-  return(list(ms = ms, prt_ms=prt_ms))   
-}
-
-create_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
-  prt_ms = c()
-  ms = c()
-  count = 1
-  
-  for(i in 1:length(cldr)){
-    for(pr in cldr_prt[[i]]){
-      if(length(ms) == 0){
-        ms[count] = pr
-        prt_ms[count] = cldr[i]
-        count = count + 1
-      }
-      else{
-        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
-          ms[count] = pr
-          prt_ms[count] = cldr[i]
-          count = count + 1
-        }
-      }
-    }
-  }
-  
-  # Only involve "num_extra_e" number of colliders
-  if(count > (num_extra_e+1)){
-    ind_cld = sample(1:length(ms))
-    ms = ms[ind_cld[1:num_extra_e]]
-    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
-    count = (num_extra_e+1)
-  }
-  
-  ind_rd = count
-  left_ind_prt = 1:num_var  # The parent can be a collider again.
-  left_ind_prt = setdiff(left_ind_prt, ms)
-  left_ind_prt = setdiff(left_ind_prt, prt_ms)
-  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
-
-  end_for = num_m - length(ms)
-  countp = count
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    prt_ms[countp] = left_ind_prt[i]
-    countp = countp + 1
-  }
-  
-  left_ind_m = setdiff(1:num_var, ms) 
-  left_ind_m = setdiff(left_ind_m, prt_ms)
-  left_ind_m = sample(left_ind_m)
-  countm = count
-  
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    ms[countm] = left_ind_m[i]
-    countm = countm + 1
-  }
-  
-  return(list(ms = ms, prt_ms=prt_ms))   
-  
-}
-
-create_mul_mar_ind <- function(cldr,cldr_prt,num_var=20, num_extra_e=3, num_m = 6){
-  prt_ms = c()
-  ms = c()
-  count = 1
-  
-  for(i in 1:length(cldr)){
-    for(pr in cldr_prt[[i]]){
-      if(length(ms) == 0){
-        ms[count] = pr
-        prt_ms[count] = cldr[i]
-        count = count + 1
-      }
-      else{
-        if((!(pr %in% prt_ms)) && (! (pr %in% ms))){
-          ms[count] = pr
-          prt_ms[count] = cldr[i]
-          count = count + 1
-        }
-      }
-    }
-  }
-  
-  # Only involve "num_extra_e" number of colliders
-  if(count > (num_extra_e+1)){
-    ind_cld = sample(1:length(ms))
-    ms = ms[ind_cld[1:num_extra_e]]
-    prt_ms = prt_ms[ind_cld[1:num_extra_e]]
-    count = (num_extra_e+1)
-  }
-  
-  ind_rd = count
-  left_ind_prt = 1:num_var  # The parent can be a collider again.
-  left_ind_prt = setdiff(left_ind_prt, ms)
-  left_ind_prt = setdiff(left_ind_prt, prt_ms)
-  left_ind_prt = sample(left_ind_prt) # used for missingness indicators -- not collider, not in the ms and prt_ms
-  
-  end_for = num_m - length(ms)
-  countp = count
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    prt_ms[countp] = left_ind_prt[i]
-    countp = countp + 1
-  }
-  
-  left_ind_m = setdiff(1:num_var, ms) 
-  left_ind_m = setdiff(left_ind_m, prt_ms)
-  left_ind_m = sample(left_ind_m)
-  countm = count
-  
-  for(i in 1:end_for){
-    # Append prt not MAR, i.e., not collider
-    if(i < count){
-      ms[countm] = ms[i]  # repeat the missingness indicator to generate multiple cause
-    }
-    else{
-      ms[countm] = left_ind_m[i]    
-    }
-    countm = countm + 1
-  }
-  
-  return(list(ms = ms, prt_ms=prt_ms))   
-  #  [m1, m2, m3, m1, m2, m3] 
-  #  [prt[1], prt[2], prt[3],prt[4], prt[5], prt[6]]
-}
-
-load_bin_data<-function(fdata){
-  read.table(fdata, header=TRUE, sep="\t", stringsAsFactors = FALSE) 
-}
-
-load_bin_graph<-function(graph.file){
-  res <- readLines(graph.file)
-  num.var <- length(strsplit(res[2], ",")[[1]])
-  graph <- matrix(0L, nrow = num.var, ncol = num.var)
-  for(row in res){
-    if(grepl("->", row, fixed=TRUE)){
-      itms <- strsplit(row, " ")[[1]]
-      cause = as.integer(gsub("[^0-9.]", "",  itms[2]))
-      effect = as.integer(gsub("[^0-9.]", "",  itms[4]))
-      graph[cause,effect] = 1
-    }
-  }
-  DAG <- as(graph,'graphNEL')
-}
-
-#************ set up the environment of R.Matlab ************
-initialize.rmatlab<-function(){
-  library(R.matlab)
-  print("Setting up matlab")
-  options(matlab="/Applications/MATLAB_R2019b.app/bin/matlab")
-  Matlab$startServer()
-  matlab <- Matlab()
-  isOpen <- open(matlab)
-  path = "/Users/ruibo/Desktop/mvpc/mvpc_v2/MVPC/src/KCI-test"
-  addpath = paste0("addpath('",path,"')", sep = "")
-  evaluate(matlab, addpath)
-  return(matlab)
-}
-# Example: 
-# matlab <- initialize.rmatlab()
-# close(matlab)
-# #************ END: set up the environment of R.Matlab ************  
-
 #****************** (Conditional) Independence Test ****************** 
 gaussCItest.td.ref <- function(x, y, S, suffStat){
   return(gaussCItest_td_ref(x, y, S, suffStat))  
@@ -437,7 +39,7 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   gaussCItest(x, y, S,suffStat)
 }
 
-gaussCItest.PermC <- function(x, y, S, suffStat){
+gaussCItest.permc <- function(x, y, S, suffStat){
   return(PermCCItest(x, y, S, suffStat))
 }
 
@@ -503,18 +105,18 @@ binCItest.permc<- function(x, y, S, suffStat){
       if(length(S) > 0){
         pval = binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))
         pval
-        }
+      }
       else{
         pval = binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))
         pval
-        }
+      }
     },
     error=function(cond) {
       message(cond)
       # Choose a return value in case of error
       return(binCItest_td(x,y,S,suffStat))
     })
-    
+  
 }  
 
 binCItest.drw <- function(x, y, S, suffStat){
@@ -536,28 +138,12 @@ binCItest.drw <- function(x, y, S, suffStat){
   }
 }
 
-binCItest_td_ref<- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  sample_size <<- c(sample_size,length(data[,1]))
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
+binCItest.td <- function(x, y, S, suffStat){
+  return(binCItest_td(x, y, S, suffStat))
 }
 
-binCItest_td <- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
-  
+binCItest.td.ref <- function(x, y, S, suffStat){
+  return(binCItest_td_ref(x, y, S, suffStat))
 }
 
 f_R<-function(r,suffStat){
@@ -617,22 +203,22 @@ compute_weights<- function(x, y, S, suffStat){
   data = suffStat$data
   n.sample = dim(data)[1]
   weights = rep(1, n.sample)
-
+  
   # Detection of parents of missingness indicators
   ind_test <- c(x, y, S)
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(weights)}
-
+  
   pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
   candi_W <- setdiff(pa_W, ind_W)
-
+  
   while(length(candi_W) > 0  ){
     ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
     pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
     candi_W <- setdiff(pa_W, ind_W)
   }
   ind_W <- unique(ind_W)
-
+  
   # Get ri and corresponding wi
   rw = get_rw_pair(x,y,S,ind_W,suffStat)
   # Get the weights check table weights <==> W
@@ -1256,6 +842,30 @@ PermCCItest <- function(x, y, S, suffStat){
   }
 }
 
+binCItest_td_ref<- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+}
+
+binCItest_td <- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  
+}
+
 iscorr<- function(x, y, S, suffStat){
   return(TRUE)
 }
@@ -1286,7 +896,7 @@ get_prt_i<- function(ind_ri, suffStat){
   prt_cell <- suffStat$prt_m['prt'][suffStat$prt_m['m'] == ind_ri]
   prt_cell[[1]]
 }
-  
+
 get_logidata <- function(ind_ri,  suffStat){
   prt_i <- get_prt_i(ind_ri, suffStat)
   ri <- as.integer(!is.na(suffStat$data[,ind_ri]))
@@ -1300,7 +910,7 @@ get_ind_r_xys <- function(ind, suffStat){
   for(i in ind){
     if(sum(is.na(suffStat$data[,i]))>0){
       ind_r_xys = c(ind_r_xys,i) 
-      }
+    }
   }
   return(ind_r_xys)
 }
@@ -1397,555 +1007,4 @@ cond.PermC<-function(x, y, S, suffStat){
 common.neighbor <- function(x,y,skel){
   skel <-as(skel,"matrix")
   sum((skel[,x]==1) & (skel[,y]==1)) > 0  # share the neighbor
-}
-
-
-## ****************** Missing Value PC (MVPC) ******************
-# Due to the pMax and sepset we have to change something inside
-
-skeleton2 <- function (suffStat, indepTest, alpha, labels, p,skel_pre, 
-                       method = c("stable","original", "stable.fast"), 
-                       m.max = Inf, fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, numCores = 1, verbose = FALSE) 
-{
-  cl <- match.call()
-  if (!missing(p)) 
-    stopifnot(is.numeric(p), length(p <- as.integer(p)) == 
-                1, p >= 2)
-  if (missing(labels)) {
-    if (missing(p)) 
-      stop("need to specify 'labels' or 'p'")
-    labels <- as.character(seq_len(p))
-  }
-  else {
-    stopifnot(is.character(labels))
-    if (missing(p)) 
-      p <- length(labels)
-    else if (p != length(labels)) 
-      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
-  }
-  seq_p <- seq_len(p)
-  method <- match.arg(method)
-  if (is.null(fixedGaps)) {
-    G <- matrix(TRUE, nrow = p, ncol = p)
-  }
-  else if (!identical(dim(fixedGaps), c(p, p))) 
-    stop("Dimensions of the dataset and fixedGaps do not agree.")
-  else if (!identical(fixedGaps, t(fixedGaps))) 
-    stop("fixedGaps must be symmetric")
-  else G <- !fixedGaps
-  diag(G) <- FALSE
-  if (any(is.null(fixedEdges))) {
-    fixedEdges <- matrix(rep(FALSE, p * p), nrow = p, ncol = p)
-  }
-  else if (!identical(dim(fixedEdges), c(p, p))) 
-    stop("Dimensions of the dataset and fixedEdges do not agree.")
-  else if (!identical(fixedEdges, t(fixedEdges))) 
-    stop("fixedEdges must be symmetric")
-  stopifnot((is.integer(numCores) || is.numeric(numCores)) && 
-              numCores > 0)
-  if (numCores > 1 && method != "stable.fast") {
-    warning("Argument numCores ignored: parallelization only available for method = 'stable.fast'")
-  }
-  if (method == "stable.fast") {
-    if (identical(indepTest, gaussCItest)) 
-      indepTestName <- "gauss"
-    else indepTestName <- "rfun"
-    options <- list(verbose = as.integer(verbose), m.max = as.integer(ifelse(is.infinite(m.max), 
-                                                                             p, m.max)), NAdelete = NAdelete, numCores = numCores)
-    res <- .Call("estimateSkeleton", G, suffStat, indepTestName, 
-                 indepTest, alpha, fixedEdges, options)
-    G <- res$amat
-    sepset <- lapply(seq_p, function(i) c(lapply(res$sepset[[i]], 
-                                                 function(v) if (identical(v, as.integer(-1))) NULL else v), 
-                                          vector("list", p - length(res$sepset[[i]]))))
-    pMax <- res$pMax
-    n.edgetests <- res$n.edgetests
-    ord <- length(n.edgetests) - 1L
-  }
-  else {
-    pval <- NULL
-    if(!is.null(skel_pre@sepset)){sepset<-skel_pre@sepset}
-    else{sepset <- lapply(seq_p, function(.) vector("list",p))}# a list of lists [p x p]
-    
-    ## save maximal p value
-    if(is.null(skel_pre@sepset)){pMax <- matrix(-Inf, nrow = p, ncol = p)}
-    else{pMax <- skel_pre@pMax}
-    
-    # sepset <- lapply(seq_p, function(.) vector("list", p))
-    # pMax <- matrix(-Inf, nrow = p, ncol = p)
-    diag(pMax) <- 1
-    done <- FALSE
-    ord <- 0L
-    n.edgetests <- numeric(1)
-    while (!done && any(G) && ord <= m.max) {
-      n.edgetests[ord1 <- ord + 1L] <- 0
-      done <- TRUE
-      ind <- which(G, arr.ind = TRUE)
-      ind <- ind[order(ind[, 1]), ]
-      remEdges <- nrow(ind)
-      if (verbose) 
-        cat("Order=", ord, "; remaining edges:", remEdges, 
-            "\n", sep = "")
-      if (method == "stable") {
-        G.l <- split(G, gl(p, p))
-      }
-      for (i in 1:remEdges) {
-        if (verbose && (verbose >= 2 || i%%100 == 0)) 
-          cat("|i=", i, "|iMax=", remEdges, "\n")
-        x <- ind[i, 1]
-        y <- ind[i, 2]
-        if (G[y, x] && !fixedEdges[y, x]) {
-          nbrsBool <- if (method == "stable") 
-            G.l[[x]]
-          else G[, x]
-          nbrsBool[y] <- FALSE
-          nbrs <- seq_p[nbrsBool]
-          length_nbrs <- length(nbrs)
-          if (length_nbrs >= ord) {
-            if (length_nbrs > ord) 
-              done <- FALSE
-            S <- seq_len(ord)
-            repeat {
-              n.edgetests[ord1] <- n.edgetests[ord1] + 
-                1
-              pval <- indepTest(x, y, nbrs[S], suffStat)
-              if (verbose) 
-                cat("x=", x, " y=", y, " S=", nbrs[S], 
-                    ": pval =", pval, "\n")
-              if (is.na(pval)) 
-                pval <- as.numeric(NAdelete)
-              if (pMax[x, y] < pval) 
-                pMax[x, y] <- pval
-              if (pval >= alpha) {
-                G[x, y] <- G[y, x] <- FALSE
-                sepset[[x]][[y]] <- nbrs[S]
-                break
-              }
-              else {
-                nextSet <- getNextSet(length_nbrs, ord, 
-                                      S)
-                if (nextSet$wasLast) 
-                  break
-                S <- nextSet$nextSet
-              }
-            }
-          }
-        }
-      }
-      ord <- ord + 1L
-    }
-    for (i in 1:(p - 1)) {
-      for (j in 2:p) pMax[i, j] <- pMax[j, i] <- max(pMax[i,j], pMax[j, i])
-    }
-  }
-  Gobject <- if (sum(G) == 0) {
-    new("graphNEL", nodes = labels)
-  }
-  else {
-    colnames(G) <- rownames(G) <- labels
-    as(G, "graphNEL")
-  }
-  new("pcAlgo", graph = Gobject, call = cl, n = integer(0), 
-      max.ord = as.integer(ord - 1), n.edgetests = n.edgetests, 
-      sepset = sepset, pMax = pMax, zMin = matrix(NA, 1, 1))
-}
-
-
-mvpc<-function(suffStat, indepTest,corrMethod,alpha, labels, p,
-               prt_m = NULL,
-               fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, m.max = Inf,
-               u2pd = c("relaxed", "rand", "retry"),
-               skel.method = c("stable", "original", "stable.fast"),
-               conservative = FALSE, maj.rule = FALSE, solve.confl = FALSE, numCores = 1, verbose = FALSE){
-  # prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
-  #   prt_m$m: a list of the missingness indicators.
-  #   prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
-  # Test-wise skeleton search result as initialization for detection. 
-  # The initialization of skeleton doesnot save that much time for the detection of parents of missingness inidicators. 
-  # e.g.:100 000 data points, the time difference is within 1 second.
-  # Thus we do not initialize it at the beginning.
-  # skel.ini_ <- skeleton(suffStat, indepTest, alpha, p=p)
-  # skel.gaps= graph2gaps(skel.ini_)
-  
-  ## MVPC step1: Detect parents of missingness indicators.
-  prt_m<-get_prt_m_ind(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
-  suffStat$prt_m = prt_m
-  ## MVPC step2:
-  # a) Run PC algorithm with the 1st step skeleton;
-  cl <- match.call()
-  if (!missing(p))
-    stopifnot(is.numeric(p), length(p <- as.integer(p)) ==
-                1, p >= 2)
-  if (missing(labels)) {
-    if (missing(p))
-      stop("need to specify 'labels' or 'p'")
-    labels <- as.character(seq_len(p))
-  }
-  else {
-    stopifnot(is.character(labels))
-    if (missing(p)) {
-      p <- length(labels)
-    }
-    else if (p != length(labels))
-      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
-    else message("No need to specify 'p', when 'labels' is given")
-  }
-  u2pd <- match.arg(u2pd)
-  skel.method <- match.arg(skel.method)
-  if (u2pd != "relaxed") {
-    if (conservative || maj.rule)
-      stop("Conservative PC and majority rule PC can only be run with 'u2pd = relaxed'")
-    if (solve.confl)
-      stop("Versions of PC using lists for the orientation rules (and possibly bi-directed edges)\n can only be run with 'u2pd = relaxed'")
-  }
-  if (conservative && maj.rule)
-    stop("Choose either conservative PC or majority rule PC!")
-
-  skel_pre <- skeleton(suffStat, indepTest, alpha, labels = labels,
-                   method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
-                   NAdelete = NAdelete, m.max = m.max, numCores = numCores,
-                   verbose = verbose)
-
-  suffStat$skel = skel_pre  # For test whether the test need to do the correction
-  fixedGaps <- graph2gaps(skel_pre)
-
-  # b) Correction of the extra edges
-  
-  skel <- skeleton2(suffStat, corrMethod, alpha, skel_pre=skel_pre, labels = labels,
-                   method = skel.method, fixedGaps = fixedGaps, fixedEdges = fixedEdges,
-                   NAdelete = NAdelete, m.max = m.max, numCores = numCores,
-                   verbose = verbose)
-  
-  # c) Orient the edges
-  skel@call <- cl
-  if (!conservative && !maj.rule) {
-    switch(u2pd, rand = udag2pdag(skel), retry = udag2pdagSpecial(skel)$pcObj,
-           relaxed = udag2pdagRelaxed(skel, verbose = verbose,
-                                      solve.confl = solve.confl))
-  }
-  else {
-    pc. <- pc.cons.intern(skel, suffStat, indepTest, alpha,
-                          version.unf = c(2, 1), maj.rule = maj.rule, verbose = verbose)
-    udag2pdagRelaxed(pc.$sk, verbose = verbose, unfVect = pc.$unfTripl,
-                     solve.confl = solve.confl)
-  }
-}
-
-get_m_ind <- function(data){
-  ## Check whether the current testing variables containing missing variables 
-  ## Value: return TRUE or FALSE
-  size <- dim(data)
-  num_var <- size[2]
-  m_ind = c()
-  for (var in 1:num_var){
-    if(anyNA(data[,var])){
-      m_ind = c(m_ind,var)
-    }
-  }
-  return(m_ind)
-}
-
-graph2gaps <- function(graphnet){
-  # graphnet: a graphNet class which is defined in pcalg
-  #
-  # ******************
-  # Return: a gaps matrix which represent the gaps in a DAG or a skeleton of a graph
-  graphnet.matrix <-as(graphnet@graph,"matrix")
-  gaps <- graphnet.matrix ==0
-  return(gaps)
-}
-
-get_prt_m_ind <- function(data, indepTest, alpha, p, fixedGaps = NULL){
-  ## Detect causes of the missingness indicators
-  ## data:
-  ## mode: the best is Anova test to test the conditional independence (the test for continuous variables also works)
-  ## ---------------------------
-  ## Return: the missingness indicator and their parents as a dataframe prt_m for mvpc
-  #   prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
-  #     prt_m$m: a list of the missingness indicators.
-  #     prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
-  
-  R<-get_m_ind(data)
-  m=c()
-  prt=list()
-  suffStat = list(data=data)
-  
-  count=1
-  for(R_ind in R){
-    prt_R_ind<- get_prt_R_ind(suffStat, indepTest, alpha, p, R_ind, fixedGaps=fixedGaps)
-    if(length(prt_R_ind)!=0){
-      m[count] <- R_ind
-      prt[[count]]<- prt_R_ind
-      count = count + 1 
-    }
-  }
-  prt_m<-data.frame(m=m)
-  prt_m[['prt']]<-prt
-  return(prt_m)
-}
-
-get_prt_R_ind <- function(suffStat, indepTest, alpha, p, R_ind,
-                          labels,  method = c("stable", "original", "stable.fast"), 
-                          m.max = Inf, fixedGaps = NULL, fixedEdges = NULL, NAdelete = TRUE, numCores = 1, verbose = FALSE){
-  # the function can be regared as "<- function(suffStat, indepTest, alpha, p, R_ind, skel.ini)"
-  # This is the skeleton search algorithm adapted from skeleton(...) in pcalg
-  # 1. Change data of the R_ind column into binary missingness indicator, and the corresponding graph
-  # 2. Only test the edges between R_ind and all the other substantial variables 
-  # 3. Test with the Anovatest (because all the tests consist of a binary variable and a continuous variable give a set of continuous variables)
-  
-  cl <- match.call()
-  if (!missing(p)) 
-    stopifnot(is.numeric(p), length(p <- as.integer(p)) == 
-                1, p >= 2)
-  if (missing(labels)) {
-    if (missing(p)) 
-      stop("need to specify 'labels' or 'p'")
-    labels <- as.character(seq_len(p))
-  }
-  else {
-    stopifnot(is.character(labels))
-    if (missing(p)) 
-      p <- length(labels)
-    else if (p != length(labels)) 
-      stop("'p' is not needed when 'labels' is specified, and must match length(labels)")
-  }
-  seq_p <- seq_len(p)
-  method <- match.arg(method)
-  if (is.null(fixedGaps)) {
-    G <- matrix(TRUE, nrow = p, ncol = p)
-  }
-  else if (!identical(dim(fixedGaps), c(p, p))) 
-    stop("Dimensions of the dataset and fixedGaps do not agree.")
-  else if (!identical(fixedGaps, t(fixedGaps))) 
-    stop("fixedGaps must be symmetric")
-  else G <- !fixedGaps
-  
-  # ****** Begin adapted 1 ******
-  G[,R_ind]<-TRUE
-  G[R_ind,]<-TRUE
-  suffStat$data[,R_ind]<-as.integer(is.na(suffStat$data[,R_ind]))
-  # ****** End adapted 1 ******
-  diag(G) <- FALSE
-  
-  if (any(is.null(fixedEdges))) {
-    fixedEdges <- matrix(rep(FALSE, p * p), nrow = p, ncol = p)
-  }
-  else if (!identical(dim(fixedEdges), c(p, p))) 
-    stop("Dimensions of the dataset and fixedEdges do not agree.")
-  else if (!identical(fixedEdges, t(fixedEdges))) 
-    stop("fixedEdges must be symmetric")
-  stopifnot((is.integer(numCores) || is.numeric(numCores)) && 
-              numCores > 0)
-  if (numCores > 1 && method != "stable.fast") {
-    warning("Argument numCores ignored: parallelization only available for method = 'stable.fast'")
-  }
-  if (method == "stable.fast") {
-    if (identical(indepTest, gaussCItest)) 
-      indepTestName <- "gauss"
-    else indepTestName <- "rfun"
-    options <- list(verbose = as.integer(verbose), m.max = as.integer(ifelse(is.infinite(m.max), 
-                                                                             p, m.max)), NAdelete = NAdelete, numCores = numCores)
-    res <- .Call("estimateSkeleton", G, suffStat, indepTestName, 
-                 indepTest, alpha, fixedEdges, options)
-    G <- res$amat
-    sepset <- lapply(seq_p, function(i) c(lapply(res$sepset[[i]], 
-                                                 function(v) if (identical(v, as.integer(-1))) NULL else v), 
-                                          vector("list", p - length(res$sepset[[i]]))))
-    pMax <- res$pMax
-    n.edgetests <- res$n.edgetests
-    ord <- length(n.edgetests) - 1L
-  }
-  else {
-    pval <- NULL
-    sepset <- lapply(seq_p, function(.) vector("list", p))
-    pMax <- matrix(-Inf, nrow = p, ncol = p)
-    diag(pMax) <- 1
-    done <- FALSE
-    ord <- 0L
-    n.edgetests <- numeric(1)
-    while (!done && any(G) && ord <= m.max) {
-      n.edgetests[ord1 <- ord + 1L] <- 0
-      done <- TRUE
-      ind <- which(G, arr.ind = TRUE)
-      ind <- ind[order(ind[, 1]), ]
-      remEdges <- nrow(ind)
-      if (verbose) 
-        cat("Order=", ord, "; remaining edges:", remEdges, 
-            "\n", sep = "")
-      if (method == "stable") {
-        G.l <- split(G, gl(p, p))
-      }
-      for (i in 1:remEdges) {
-        if (verbose && (verbose >= 2 || i%%100 == 0)) 
-          cat("|i=", i, "|iMax=", remEdges, "\n")
-        x <- ind[i, 1]
-        y <- ind[i, 2]
-        
-        # ****** Begin adapted 2 ******
-        if(x!=R_ind){next}  # we only focus on the missingness variable
-        # ****** End adapted 2 ******
-        
-        if (G[y, x] && !fixedEdges[y, x]) {
-          nbrsBool <- if (method == "stable") 
-            G.l[[x]]
-          else G[, x]
-          nbrsBool[y] <- FALSE
-          nbrs <- seq_p[nbrsBool]
-          length_nbrs <- length(nbrs)
-          if (length_nbrs >= ord) {
-            if (length_nbrs > ord) 
-              done <- FALSE
-            S <- seq_len(ord)
-            repeat {
-              n.edgetests[ord1] <- n.edgetests[ord1] + 
-                1
-              pval <- indepTest(x, y, nbrs[S], suffStat)
-              if (verbose) 
-                cat("x=", x, " y=", y, " S=", nbrs[S], 
-                    ": pval =", pval, "\n")
-              if (is.na(pval)) 
-                pval <- as.numeric(NAdelete)
-              if (pMax[x, y] < pval) 
-                pMax[x, y] <- pval
-              if (pval >= alpha) {
-                G[x, y] <- G[y, x] <- FALSE
-                sepset[[x]][[y]] <- nbrs[S]
-                break
-              }
-              else {
-                nextSet <- getNextSet(length_nbrs, ord, 
-                                      S)
-                if (nextSet$wasLast) 
-                  break
-                S <- nextSet$nextSet
-              }
-            }
-          }
-        }
-      }
-      ord <- ord + 1L
-    }
-    for (i in 1:(p - 1)) {
-      for (j in 2:p) pMax[i, j] <- pMax[j, i] <- max(pMax[i, 
-                                                          j], pMax[j, i])
-    }
-  }
-  
-  prts<-G[R_ind,]
-  x<-c(1:length(suffStat$data[1,]))
-  return(x[prts])
-}
-
-
-#****************** Evaluation ******************
-comp_com_td_mvpc<- function(exp="mar_cor",
-                            n=1000, 
-                            times=10,
-                            p=20,
-                            data_path="/Users/ruibo/Desktop/mvpc/mvpc-xyz/causality/R-proj/data"
-                            ){
-  shd_comp= rep(0,times)
-  shd_mvpc = rep(0,times)
-  shd_test = rep(0,times)
-  
-  for(i in 1:times){
-    print(i)
-    # i=10
-    load(paste(data_path,"/syn/",exp,n,"_",i,".rda",sep=""))
-    
-    data_mcar = data_all$data_mcar
-    data_c = data_all$data_c
-    suffStat = list(data_m = data_all$suffStat$data)
-    myCPDAG=data_all$cpdag
-    myDAG=data_all$dag
-    
-    res_mvpc<-mvpc(suffStat, gaussCItest_td,PermCCItest, alpha=0.01, p=p)
-    res_pc<-pc(suffStat, gaussCItest_td, alpha=0.01, p=p)
-    
-    suffStat  = list(C = cor(data_c),n=length(data_c[,1]))
-    res_ref<-pc(suffStat, gaussCItest, alpha=0.01, p=p)
-    
-    shd_comp[i] = shd(res_ref, myCPDAG)
-    shd_mvpc[i] = shd(res_mvpc, myCPDAG)
-    shd_test[i] = shd(res_pc, myCPDAG)  
-  }
-  return(list(shd_comp=shd_comp,shd_mvpc=shd_mvpc,shd_test=shd_test))
-}
-
-eva.detection<-function(prt1,prt2){
-  count = 0
-  for(i in 1:length(prt1)){
-    if(length(prt1[i])!=length(prt2[[i]])){count = count + 1 }
-    else if(prt1[i]!=prt2[[i]]){count = count + 1 }
-  }
-  return(count)
-}
-
-test_adj<-function(myCPDAG,res){
-  ## Ajacency
-  
-  true_skel<-get_edge_pairs(myCPDAG)
-  our_skel<-get_edge_pairs(res)
-  
-  tran_true_skel<-get_trans_edge_pairs(myCPDAG)
-  tran_our_skel<-get_trans_edge_pairs(res)
-  
-  true_pair <- complex(real = true_skel[,1], imaginary = true_skel[,2])
-  ours_pair <- complex(real = our_skel[,1], imaginary = our_skel[,2])
-  
-  tran_true_pair <- complex(real = tran_true_skel[,1], imaginary = tran_true_skel[,2])
-  tran_ours_pair <- complex(real = tran_our_skel[,1], imaginary = tran_our_skel[,2])
-  
-  # all pairs:
-  all_pair<-union(true_pair,tran_true_pair)
-  all_pair_us <-union(ours_pair,tran_ours_pair)
-  
-  num_our<-length(all_pair_us)
-  num_true<-length(all_pair)
-  num_us_correct<-length(intersect(all_pair_us,all_pair))
-  recall<-num_us_correct/num_true
-  precision<-num_us_correct/num_our
-  return(list(recall=recall, precision=precision))
-}
-
-get_edge_pairs<-function(G){
-  g<-as(G,'matrix')
-  g[lower.tri(g)]<-0
-  g<-g==1
-  which(g, arr.ind = TRUE)
-}
-
-get_trans_edge_pairs<-function(G){
-  g<-t(as(G,'matrix'))
-  g[lower.tri(g)]<-0
-  g<-g==1
-  which(g, arr.ind = TRUE)
-}
-
-compute_rp<-function(rp_){
-  recall = c()
-  precision = c()
-  count = 1
-  for(i in 1:length(rp_)){
-    if(i == 6 | i ==12 | i==18 | i==24){next}
-    recall[count] = rp_[[i]]$recall
-    precision[count] = rp_[[i]]$precision
-    count = count + 1
-  }
-  return(c(mean(recall), sd(recall), mean(precision),sd(precision)))
-}
-
-compute_f1<-function(rp_){
-  recall = c()
-  precision = c()
-  f1 = c()
-  count = 1
-  for(i in 1:length(rp_)){
-    if(i == 6 | i ==12 | i==18 | i==24){next}
-    recall[count] = rp_[[i]]$recall
-    precision[count] = rp_[[i]]$precision
-    f1[count] = 2 * ( recall[count] * precision[count])/( recall[count] + precision[count])
-    count = count + 1
-  }
-  return(c(mean(f1), sd(f1)))
 }

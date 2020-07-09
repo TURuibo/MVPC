@@ -3,7 +3,10 @@ src_path<-paste(proj_path,'/src',sep="")
 res_path<-paste(proj_path,'/result',sep="")
 data_path<-paste(proj_path,'/data',sep="")
 
-source(paste(src_path,'/all_functions.R',sep=""))
+source(paste(src_path,'/CITest.R',sep=""))
+source(paste(src_path,'/Evaluation.R',sep=""))
+source(paste(src_path,'/MissingValuePC.R',sep=""))
+source(paste(src_path,'/SyntheticDataGeneration.R',sep=""))
 
 shd_mvpc_permc = c()
 shd_mvpc_drw = c()
@@ -62,27 +65,37 @@ for(num_sample in num_sample_ls){
     
     ## ********* PermC Correction *********
     res.mvpc.permc <-mvpc(suffStat_m,
-                          gaussCItest_td, PermCCItest,
+                          gaussCItest.td, 
+                          gaussCItest.permc,
                           prt_m=prt_m, alpha=0.01, p=num_var)
     
     ## ********* DRW Correction *********
     res.mvpc.drw <-mvpc(suffStat_m,
-                        gaussCItest_td,
+                        gaussCItest.td,
                         gaussCItest.drw,
                         prt_m=prt_m, alpha=0.01, p=num_var)
     
     ## ********* Complete data evaluation *********
-    res.comp<-pc(suffStat, gaussCItest, alpha=0.01, p=num_var)
+    res.comp<-pc(suffStat, 
+                 gaussCItest, 
+                 alpha=0.01, 
+                 p=num_var)
     
     ## ********* Test-Wise Deletion *********
     sample_size <<- c()
     suffStat_tw = list(data=data_m)
-    res.td<-pc(suffStat_tw, gaussCItest_td_ref, alpha=0.01, p=num_var)
+    res.td<-pc(suffStat_tw, 
+               gaussCItest.td.ref, 
+               alpha=0.01, 
+               p=num_var)
     sample_size <- floor(mean(sample_size))
     
     ## ********* MCAR Complete data evaluation *********
     suffStat_ref  = list(C = cor(data_complete[1:sample_size,]),n=sample_size)
-    res.ref<-pc(suffStat_ref, gaussCItest, alpha=0.01, p=num_var)
+    res.ref<-pc(suffStat_ref, 
+                gaussCItest, 
+                alpha=0.01, 
+                p=num_var)
     
     i_ind = graph_ind
     

@@ -3,7 +3,10 @@ src_path<-paste(proj_path,'/src',sep="")
 res_path<-paste(proj_path,'/result',sep="")
 data_path<-paste(proj_path,'/data',sep="")
 
-source(paste(src_path,'/all_functions.R',sep=""))
+source(paste(src_path,'/CITest.R',sep=""))
+source(paste(src_path,'/Evaluation.R',sep=""))
+source(paste(src_path,'/MissingValuePC.R',sep=""))
+source(paste(src_path,'/SyntheticDataGeneration.R',sep=""))
 
 set.seed(777)
 shd_mvpc_permc = c()
@@ -46,7 +49,7 @@ for(graph_ind in 1:5){
   ## ********* PermC Correction *********
   res.mvpc.permc <-mvpc(suffStat_m,
                         gaussCItest.td, 
-                        gaussCItest.PermC,
+                        gaussCItest.permc,
                         alpha=0.01, 
                         p=num_var)
   
