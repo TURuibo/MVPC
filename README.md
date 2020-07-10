@@ -27,15 +27,15 @@ The directory structure is:
 	* bins: Binary experiments.    
 		* bin_NoS_mar.R: the experiments with different sample sizes in MAR datasets.  
 		* bin_NoS_mnar.R: the experiments with different sample sizes in MNAR datasets.  	
-	* conti: linear Gaussain experiments.  
-		* Mul_cause.R: the experiments for the case with multiple parents of missingness indicators.  
-		* NoS_mar.R: the experiments with different sample sizes in MAR datasets.  
-		* NoS_mnar.R: the experiments with different sample sizes in MNAR datasets.  
-		* NoV: the experiments with different number of variables in MAR datasets.  
+	* conti: Linear Gaussain experiments.  
+		* Mul_cause.R: Experiments for the case with multiple parents of missingness indicators.  
+		* NoS_mar.R: Experiments with different sample sizes in MAR datasets.  
+		* NoS_mnar.R: Experiments with different sample sizes in MNAR datasets.  
+		* NoV: Experiments with different number of variables in MAR datasets.  
 	* results: Some results in the experiments.  
-* data: The used dataset for binary experiments.
+* data: Used datasets for binary experiments.
 
-* demo.R: A example of applying MVPC to the linear Gaussian case with missing values.  
+* demo.R: An example of applying MVPC to the linear Gaussian case with missing values.  
 
 ## Reference
 [1] Causal Discovery in the Presence of Missing Data, AISTATS 2019, Ruibo Tu\*, Cheng Zhang\*, Paul Ackermann, Karthika Mohan, Clark Glymour, Hedvig Kjellström, Kun Zhang\*
