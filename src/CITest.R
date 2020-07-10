@@ -1,10 +1,108 @@
 #****************** (Conditional) Independence Test ****************** 
-gaussCItest.td.ref <- function(x, y, S, suffStat){
-  return(gaussCItest_td_ref(x, y, S, suffStat))  
+
+gaussCItest.td.ref <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
 }
 
-gaussCItest.td <- function(x, y, S, suffStat){
-  return(gaussCItest_td(x, y, S, suffStat))
+gaussCItest.td <- function(x, y, S, suffStat) {
+  ## Conditional independence test between continuous variables with deletion methods
+  ## test P(x,y|S)
+  ## suffStat: the class contains the dataset and other necessary variables
+  ##    suffStat$data: the dataset
+  ##--------------
+  ## Return: the p-value of the test 
+  
+  data = test_wise_deletion(c(x,y,S),suffStat$data)
+  suffStat$data = data
+  suffStat$C = cor(data)
+  suffStat$n = length(data[,1])
+  gaussCItest(x, y, S, suffStat)
+}
+
+gaussCItest.permc <- function(x, y, S, suffStat){
+  ## The Z <- XY; Rz <- XY is not included in the test 
+  ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  ind_W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+  ind_permc <- c(x, y, S, ind_W)
+  ind_test <- c(x, y, S)
+  data <- test_wise_deletion(ind_permc, suffStat$data)
+  data <- data[,ind_permc]
+  
+  xnam <- paste0("data[,", (length(ind_test)+1):length(ind_permc),"]")
+  lr <- list()
+  res <- list()
+  for( i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
+    fmla <- as.formula(paste("data[,", i,"] ~ 0 + ", paste(xnam, collapse= "+"),""))
+    lr[[i]] <- lm(formula = fmla, data = data.frame(data))  # the ith block of list is ...
+    res[[i]] <- residuals(lr[[i]])  # residuals
+  }
+  
+  ## Step 2: Shuffle the source "W" -- parents of the missingness indicators
+  #         a) Remove the missing entries of dat[, W]
+  #         b) Row-based/ sample based Shuffle the index of W data points
+  #         c) the same number of test-wise deletion CI Test 
+  data_W_p = perm(ind_W, suffStat$data)
+  for(i in (length(ind_test)+1):length(ind_permc)){
+    data[, i] = data_W_p[1:length(data[,1]),i-length(ind_test)]  
+  }
+  
+  ## Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
+  vir <- list()
+  for(i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
+    vir[[i]] = predict(lr[[i]],list(data)) + res[[i]] 
+  }
+  
+  data_perm = data.frame(vir[[1]])
+  for(i in 1:length(ind_test)){ # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
+    data_perm[,i]=vir[[i]]
+  }
+  suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
+  if(length(ind_test)>2){
+    pval = gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)
+    pval
+  }
+  else{
+    pval = gaussCItest(1, 2,c(), suffStat_perm)
+    pval
+  }
+}
+
+binCItest.td.ref<- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+}
+
+binCItest.td <- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  
 }
 
 gaussCItest.drw <- function(x, y, S, suffStat) {
@@ -37,10 +135,6 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   suffStat$C = wtd.cors(tw_data, tw_data, weights)
   suffStat$n = length(weights)
   gaussCItest(x, y, S,suffStat)
-}
-
-gaussCItest.permc <- function(x, y, S, suffStat){
-  return(PermCCItest(x, y, S, suffStat))
 }
 
 binCItest.permc<- function(x, y, S, suffStat){  
@@ -138,13 +232,8 @@ binCItest.drw <- function(x, y, S, suffStat){
   }
 }
 
-binCItest.td <- function(x, y, S, suffStat){
-  return(binCItest_td(x, y, S, suffStat))
-}
 
-binCItest.td.ref <- function(x, y, S, suffStat){
-  return(binCItest_td_ref(x, y, S, suffStat))
-}
+#****************** Util for the CI tests ****************** 
 
 f_R<-function(r,suffStat){
   n.sample = dim(suffStat$data)[1]
@@ -759,111 +848,6 @@ kdrw.weights <- function (x, x_target){
   beta_cs = getVariable(matlab, "beta_cs")
   beta = beta_cs$beta.cs
   beta = beta
-}
-
-gaussCItest_td_ref <- function(x, y, S, suffStat) {
-  ## Conditional independence test between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  
-  data = test_wise_deletion(c(x,y,S),suffStat$data)
-  sample_size <<- c(sample_size,length(data[,1]))
-  
-  suffStat$data = data
-  suffStat$C = cor(data)
-  suffStat$n = length(data[,1])
-  gaussCItest(x, y, S, suffStat)
-}
-
-gaussCItest_td <- function(x, y, S, suffStat) {
-  ## Conditional independence test between continuous variables with deletion methods
-  ## test P(x,y|S)
-  ## suffStat: the class contains the dataset and other necessary variables
-  ##    suffStat$data: the dataset
-  ##--------------
-  ## Return: the p-value of the test 
-  
-  data = test_wise_deletion(c(x,y,S),suffStat$data)
-  suffStat$data = data
-  suffStat$C = cor(data)
-  suffStat$n = length(data[,1])
-  gaussCItest(x, y, S, suffStat)
-}
-
-PermCCItest <- function(x, y, S, suffStat){
-  ## The Z <- XY; Rz <- XY is not included in the test 
-  ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
-  ind_W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
-  ind_permc <- c(x, y, S, ind_W)
-  ind_test <- c(x, y, S)
-  data <- test_wise_deletion(ind_permc, suffStat$data)
-  data <- data[,ind_permc]
-  
-  xnam <- paste0("data[,", (length(ind_test)+1):length(ind_permc),"]")
-  lr <- list()
-  res <- list()
-  for( i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
-    fmla <- as.formula(paste("data[,", i,"] ~ 0 + ", paste(xnam, collapse= "+"),""))
-    lr[[i]] <- lm(formula = fmla, data = data.frame(data))  # the ith block of list is ...
-    res[[i]] <- residuals(lr[[i]])  # residuals
-  }
-  
-  ## Step 2: Shuffle the source "W" -- parents of the missingness indicators
-  #         a) Remove the missing entries of dat[, W]
-  #         b) Row-based/ sample based Shuffle the index of W data points
-  #         c) the same number of test-wise deletion CI Test 
-  data_W_p = perm(ind_W, suffStat$data)
-  for(i in (length(ind_test)+1):length(ind_permc)){
-    data[, i] = data_W_p[1:length(data[,1]),i-length(ind_test)]  
-  }
-  
-  ## Step 3: Generate the virtual data follows the full data distribution P(X, Y, S)
-  vir <- list()
-  for(i in 1:length(ind_test)){  # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
-    vir[[i]] = predict(lr[[i]],list(data)) + res[[i]] 
-  }
-  
-  data_perm = data.frame(vir[[1]])
-  for(i in 1:length(ind_test)){ # NOTE: the order always the "1(x) CI 2(y) given all the others (S)"  The order of xyS and the order of PermC test 
-    data_perm[,i]=vir[[i]]
-  }
-  suffStat_perm = list(C=cor(data_perm), n=length(data_perm[,1]))
-  if(length(ind_test)>2){
-    pval = gaussCItest(1, 2, 3:length(ind_test), suffStat_perm)
-    pval
-  }
-  else{
-    pval = gaussCItest(1, 2,c(), suffStat_perm)
-    pval
-  }
-}
-
-binCItest_td_ref<- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  sample_size <<- c(sample_size,length(data[,1]))
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
-}
-
-binCItest_td <- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
-  
 }
 
 iscorr<- function(x, y, S, suffStat){

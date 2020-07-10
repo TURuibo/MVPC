@@ -1,14 +1,41 @@
 # MVPC
-a repo for causal discovery in the presence of missing data
+In this repository, we provide the implementation of Missing Value PC (MVPC) for both linear Gaussian and binary cases. MVPC is a framework of causal discovery in the presence of different missingness mechanisms, including missing completely at random (MCAR), missing at random (MAR), and missing not at random (MNAR). MVPC is based on the PC algorithm and contains two methods for correcting wrong results produced by missing value issues, *Permutation-based Correction (PermC)* and *Density Ratio Weighted (DRW) correction method*. More details can be found in [the paper [1]](https://arxiv.org/abs/1807.04010). The implementation is based on the R package [pcalg](https://cran.r-project.org/web/packages/pcalg/index.html).  
 
-mar new: 
-17.2 16.9 21.1; 13.2 6.7 3.7; 13.2 7.1 7.4
+## Content 
 
-mar old: 
-17.2 16.9 21.1; 13.2 6.7 4.4; 13.2 7.1 7.4
+- [Installation](#Installation)
+- [Structure of Repository](#structure-of-repository)
+- [Usage and Examples](#usage-and-examples)
 
-mnar new:
-17.9 20.2 17.5; 14.1 9.4 2.2; 14.1 10.8 8.0
+## Installation
 
-mnar old:
-17.9 20.2 17.5; 14.1 9.6 2.6; 14.1 10.8 8.0
+Step 1: Install [R](https://www.r-project.org).
+
+Step 2: Intall attached packages.  
+	mipfp_3.2.1, numDeriv_2016.8-1, Rsolnp_1.16, cmm_0.12, DescTools_0.99.28, e1071_1.7-2, ks_1.11.6, weights_1.0, mice_3.4.0, gdata_2.18.0, Hmisc_4.2-0, ggplot2_3.1.1, Formula_1.2-3, survival_2.44-1.1, lattice_0.20-38, mvtnorm_1.0-11, pcalg_2.6-2, graph_1.60.0, BiocGenerics_0.28.0  
+
+## Structure of Repository
+
+The directory structure is:
+
+* src: The source code for MVPC.  
+	* MissingValuePC.R: Implementation of the  MVPC framework.  
+	* CITest.R: Implementation of conditional independence tests.  
+	* SyntheticDataGeneration.R: Generation of sythetic data.  
+	* Evaluation.R: Evaluation metrics, such as Structural Hamming distance, recall and precision of the causal skeleton results.  
+* exps: The experiments on the binary and continuous variable datasets.  
+	* bins: Binary experiments.    
+		* bin_NoS_mar.R: the experiments with different sample sizes in MAR datasets.  
+		* bin_NoS_mnar.R: the experiments with different sample sizes in MNAR datasets.  	
+	* conti: linear Gaussain experiments.  
+		* Mul_cause.R: the experiments for the case with multiple parents of missingness indicators.  
+		* NoS_mar.R: the experiments with different sample sizes in MAR datasets.  
+		* NoS_mnar.R: the experiments with different sample sizes in MNAR datasets.  
+		* NoV: the experiments with different number of variables in MAR datasets.  
+	* results: Some results in the experiments.  
+* data: The used dataset for binary experiments.
+
+* demo.R: A example of applying MVPC to the linear Gaussian case with missing values.  
+
+## Reference
+[1] Causal Discovery in the Presence of Missing Data, AISTATS 2019, Ruibo Tu\*, Cheng Zhang\*, Paul Ackermann, Karthika Mohan, Clark Glymour, Hedvig Kjellström, Kun Zhang\*

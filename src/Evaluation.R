@@ -1,10 +1,10 @@
 #****************** Evaluation ******************
+
 comp_com_td_mvpc<- function(exp="mar_cor",
                             n=1000, 
                             times=10,
                             p=20,
-                            data_path="/Users/ruibo/Desktop/mvpc/mvpc-xyz/causality/R-proj/data"
-){
+                            data_path="/Users/ruibo/Desktop/mvpc/mvpc-xyz/causality/R-proj/data"){
   shd_comp= rep(0,times)
   shd_mvpc = rep(0,times)
   shd_test = rep(0,times)

@@ -1,14 +1,5 @@
-library(pcalg)
-library(mvtnorm)
-library(weights)
-library(ks)
-library(e1071)  # For generating all combinations of a binary vector
-library(weights)  # For kernel density estimate
-library(ks)
+#****************** Functions for Synthetic Data Generation ******************
 
-library(DescTools)
-library(mipfp)
-#******************Functions for Synthetic Data Generation******************
 gen_data <- function(num_sample,
                      mode='mar',
                      num_var=20, 
@@ -59,6 +50,8 @@ gen_data <- function(num_sample,
               data_ref=data_ref,
               ground_truth=ground_truth))
 }
+
+#******************Util for generating synthetic ******************
 
 gen_m_prt <- function(DAG, mode='mar',
                       num_var=20, 

@@ -8,7 +8,9 @@ library(ks)
 library(DescTools)
 library(mipfp)
 
+
 ## ****************** The famework MVPC: Missing Value PC (MVPC) ******************
+
 mvpc<-function(suffStat, indepTest,corrMethod,alpha,p,
                prt_m = NULL,
                labels=NULL,
@@ -102,7 +104,23 @@ detection_prt_m <- function(data, indepTest, alpha, p, fixedGaps = NULL){
   #     prt_m$m: a list of the missingness indicators.
   #     prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
   
-  return(get_prt_m_ind(data, indepTest, alpha, p, fixedGaps))
+  R<-get_m_ind(data)
+  m=c()
+  prt=list()
+  suffStat = list(data=data)
+  
+  count=1
+  for(R_ind in R){
+    prt_R_ind<- get_prt_R_ind(suffStat, indepTest, alpha, p, R_ind, fixedGaps=fixedGaps)
+    if(length(prt_R_ind)!=0){
+      m[count] <- R_ind
+      prt[[count]]<- prt_R_ind
+      count = count + 1 
+    }
+  }
+  prt_m<-data.frame(m=m)
+  prt_m[['prt']]<-prt
+  return(prt_m)
 }
 
 ## Causal skeleton search with correction methods
@@ -252,6 +270,8 @@ skeleton2 <- function (suffStat, indepTest, alpha, labels, p,skel_pre,
       sepset = sepset, pMax = pMax, zMin = matrix(NA, 1, 1))
 }
 
+## ****************** Util for MVPC ******************
+
 get_m_ind <- function(data){
   ## Check whether the current testing variables containing missing variables 
   ## Value: return TRUE or FALSE
@@ -274,31 +294,6 @@ graph2gaps <- function(graphnet){
   graphnet.matrix <-as(graphnet@graph,"matrix")
   gaps <- graphnet.matrix ==0
   return(gaps)
-}
-
-get_prt_m_ind <- function(data, indepTest, alpha, p, fixedGaps = NULL){
-  ## Return: the missingness indicator and their parents as a dataframe prt_m for mvpc
-  #   prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
-  #     prt_m$m: a list of the missingness indicators.
-  #     prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
-  
-  R<-get_m_ind(data)
-  m=c()
-  prt=list()
-  suffStat = list(data=data)
-  
-  count=1
-  for(R_ind in R){
-    prt_R_ind<- get_prt_R_ind(suffStat, indepTest, alpha, p, R_ind, fixedGaps=fixedGaps)
-    if(length(prt_R_ind)!=0){
-      m[count] <- R_ind
-      prt[[count]]<- prt_R_ind
-      count = count + 1 
-    }
-  }
-  prt_m<-data.frame(m=m)
-  prt_m[['prt']]<-prt
-  return(prt_m)
 }
 
 get_prt_R_ind <- function(suffStat, indepTest, alpha, p, R_ind,
