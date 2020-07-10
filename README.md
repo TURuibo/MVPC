@@ -1,12 +1,6 @@
 # MVPC
 In this repository, we provide the implementation of Missing Value PC (MVPC) for both linear Gaussian and binary cases. MVPC is a framework of causal discovery in the presence of different missingness mechanisms, including missing completely at random (MCAR), missing at random (MAR), and missing not at random (MNAR). MVPC is based on the PC algorithm and contains two methods for correcting wrong results produced by missing value issues, *Permutation-based Correction (PermC)* and *Density Ratio Weighted (DRW) correction method*. More details can be found in [the paper [1]](https://arxiv.org/abs/1807.04010). The implementation is based on the R package [pcalg](https://cran.r-project.org/web/packages/pcalg/index.html).  
 
-## Content 
-
-- [Installation](#Installation)
-- [Structure of Repository](#structure-of-repository)
-- [Usage and Examples](#usage-and-examples)
-
 ## Installation
 
 Step 1: Install [R](https://www.r-project.org).
