@@ -3,7 +3,10 @@ src_path<-paste(proj_path,'/src',sep="")
 res_path<-paste(proj_path,'/result',sep="")
 data_path<-paste(proj_path,'/data',sep="")
 
-source(paste(src_path,'/all_functions.R',sep=""))
+source(paste(src_path,'/CITest.R',sep=""))
+source(paste(src_path,'/Evaluation.R',sep=""))
+source(paste(src_path,'/MissingValuePC.R',sep=""))
+source(paste(src_path,'/SyntheticDataGeneration.R',sep=""))
 
 set.seed(100)
 td_pc = list()
@@ -25,7 +28,7 @@ r_ref = list()
 r_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-n_sp = c(10000)
+n_sp = c(1000, 10000)
 count = 1
 for(sz in n_sp){
   shd_mvpc_permc = c()
@@ -42,7 +45,7 @@ for(sz in n_sp){
   rp_pc = list()
   rp_td_pc = list()
   
-  for(i_g in 1:10){
+  for(i_g in 1:5){
     print(paste('graph=', i_g,'number of samples: ', sz))
     data.name = paste('data',i_g,sep='')
     graph.name = paste('graph',i_g,sep='')
@@ -54,55 +57,30 @@ for(sz in n_sp){
     data = data[1:sz,]
     DAG = load_bin_graph(graph.file)
     CPDAG = dag2cpdag(DAG)
-    
-    # Detect colliders and  Colliders' parents
-    cldr <- detect_colliders(DAG)
-    cldr_prt <- detect_colliders_prt(DAG, cldr)
-    # Choose missingness inidcator and their parents
-    
-    
-    p_m <- create_mar_ind(cldr,cldr_prt,
-                           num_var=20, 
+    bindata = gen.bin.data(data, DAG, 
+                           mode = 'mar', 
+                           num_var=20,
                            num_extra_e=5, 
-                           num_m = 10) 
-    ms = p_m$ms
-    prt_ms = p_m$prt_ms
-    
-    # Generate missing values 
-    mask = data != data
-    
-    for(i in 1:length(ms)){
-      nsample = nrow(data)
-      pr1 <- plogis(2*data[,prt_ms[i]]-0.5); 
-      r <- rbinom(nsample, 1, prob = pr1)==1
-      mask[,ms[i]] = r
-    }
-    data_m = data
-    data_m[mask] = NA
-    prt_m<-data.frame(m=ms)
-    
-    prt = list()
-    for(i in 1:length(prt_ms)){
-      prt[[i]] = c(prt_ms[i])  
-    }
-    
-    prt_m[['prt']]<-prt
-    ## ********* Correction *********
-    suffStat = list(data=data_m,adaptDF=FALSE)
-    res_mvpc_permc<-mvpc(suffStat, binCItest_td, binCItest.permc,prt_m, alpha=0.05, p=20)
+                           num_m = 10)
+    data_m= bindata$data 
+    prt_m=bindata$prt_m
     
     ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
-    res_mvpc_drw<-mvpc(suffStat, binCItest_td, binCItest.drw, prt_m, alpha=0.05, p=20)
+    res_mvpc_permc<-mvpc(suffStat, binCItest.td, binCItest.permc,prt_m, alpha=0.05, p=20)
+    
+    ## ********* Correction *********
+    suffStat = list(data=data_m,adaptDF=FALSE)
+    res_mvpc_drw<-mvpc(suffStat, binCItest.td, binCItest.drw, prt_m, alpha=0.05, p=20)
     
     ## ********* Complete data evaluation *********
     suffStat = list(data=data,adaptDF=FALSE)
-    res_pc<-pc(suffStat, binCItest_td, alpha=0.05, p=20)
+    res_pc<-pc(suffStat, binCItest.td, alpha=0.05, p=20)
     
     ## ********* Test-Wise Deletion *********
     sample_size <<- c()
     suffStat = list(data=data_m,adaptDF=FALSE)
-    res_td_pc<-pc(suffStat, binCItest_td_ref, alpha=0.05, p=20)
+    res_td_pc<-pc(suffStat, binCItest.td.ref, alpha=0.05, p=20)
     sample_size <- mean(sample_size)
     
     ## ********* MCAR Complete data evaluation *********

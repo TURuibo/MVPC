@@ -51,6 +51,50 @@ gen_data <- function(num_sample,
               ground_truth=ground_truth))
 }
 
+gen.bin.data<- function(data, DAG, mode = 'mar', num_var=20,num_extra_e=5,num_m = 10){
+  # Detect colliders and  Colliders' parents
+  cldr <- detect_colliders(DAG)
+  cldr_prt <- detect_colliders_prt(DAG, cldr)
+  # Choose missingness inidcator and their parents
+  
+  if(mode=='mar'){
+    p_m <- create_mar_ind(cldr,cldr_prt,
+                          num_var, 
+                          num_extra_e, 
+                          num_m)   
+  }else{
+    p_m <- create_mnar_ind(cldr,cldr_prt,
+                           num_var, 
+                           num_extra_e, 
+                           num_m)   
+  }
+  
+  ms = p_m$ms
+  prt_ms = p_m$prt_ms
+  
+  # Generate missing values 
+  mask = data != data
+  
+  for(i in 1:length(ms)){
+    nsample = nrow(data)
+    pr1 <- plogis(2*data[,prt_ms[i]]-0.5); 
+    r <- rbinom(nsample, 1, prob = pr1)==1
+    mask[,ms[i]] = r
+  }
+  data_m = data
+  data_m[mask] = NA
+  prt_m<-data.frame(m=ms)
+  
+  prt = list()
+  for(i in 1:length(prt_ms)){
+    prt[[i]] = c(prt_ms[i])  
+  }
+  
+  prt_m[['prt']]<-prt
+  return(list(data=data_m, 
+         prt_m=prt_m))
+}
+
 #******************Util for generating synthetic ******************
 
 gen_m_prt <- function(DAG, mode='mar',

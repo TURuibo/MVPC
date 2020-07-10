@@ -10,7 +10,6 @@ library(mipfp)
 
 
 ## ****************** The famework MVPC: Missing Value PC (MVPC) ******************
-
 mvpc<-function(suffStat, indepTest,corrMethod,alpha,p,
                prt_m = NULL,
                labels=NULL,
@@ -34,7 +33,10 @@ mvpc<-function(suffStat, indepTest,corrMethod,alpha,p,
   # Other inputs and Return follow the function pc in the package "pcalg"
   
   ## MVPC step1: Detect parents of missingness indicators.
-  prt_m<-detection_prt_m(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+  if(missing(prt_m)){
+    prt_m<-detection_prt_m(data=suffStat$data, indepTest, alpha, p) # "suffStat$data" is "data_m" which containing missing values.
+    suffStat$prt_m = prt_m
+  }
   suffStat$prt_m = prt_m
   
   ## MVPC step2:

@@ -1,4 +1,122 @@
 #****************** (Conditional) Independence Test ****************** 
+binCItest.td <- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+  
+}
+
+binCItest.td.ref<- function(x, y, S, suffStat){
+  test_ind = c(x,y,S)
+  data = test_wise_deletion(test_ind,suffStat$data)
+  sample_size <<- c(sample_size,length(data[,1]))
+  if(length(S)>0){
+    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
+  }
+  else{
+    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
+  }
+}
+
+binCItest.permc<- function(x, y, S, suffStat){  
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest.td(x,y,S,suffStat))}
+  tryCatch(
+    {
+      ind_test <- c(x, y, S)
+      ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+      ind_W <- setdiff(ind_W,ind_test)
+      if(length(ind_W)==0){return(binCItest.td(x,y,S,suffStat))}
+      ind_permc <- c(ind_test, ind_W)  
+      
+      ## Step 1: Get CPD given W = 0 and W = 1 
+      data <- test_wise_deletion(ind_permc, suffStat$data)
+      data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
+      num.td <- length(data[,1])
+      num.W <- length(ind_W)
+      comb.W <- bincombinations(length(ind_W))
+      
+      dm <- dim(comb.W)
+      n.comb.W <- dm[1]
+      
+      p.joint.w <- list()
+      for(i in 1:n.comb.W){
+        ind.mask <- comb.W[i, ] == data[,(length(ind_test)+1):length(ind_permc)]
+        ind.mask <- matrix(data = ind.mask, nrow = length(data[,1]))
+        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+        dat.wi <- data[ind_wi, 1:length(ind_test)]
+        p.xy.wi <- apply(dat.wi,2, function(x) sum(x)/length(x))
+        cor.xy.wi <- cor(dat.wi)
+        p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
+      }
+      
+      ## Step 2: Shuffle W 
+      data.W <- test_wise_deletion(ind_W, suffStat$data)
+      nrow.td.W <- length(data.W[,1])
+      data.W <- data.W[,ind_W]
+      if(length(ind_W)==1){
+        data.W <- matrix(data = data.W, nrow = nrow.td.W,byrow = TRUE)  
+      }
+      
+      ind <- 1:nrow.td.W
+      ind.perm.w <- sample(ind)[1:num.td]
+      data.W.perm <- data.W[ind.perm.w,]
+      if(length(ind_W)==1){data.W.perm <- matrix(data = data.W.perm, nrow = num.td,byrow = TRUE)}
+      
+      ## Step 3: Generate virtual data of x,y, and S
+      for(i in 1:n.comb.W){
+        ind.mask <- comb.W[i, ] == data.W.perm
+        if(length(ind_W)==1){ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]),byrow = TRUE)}
+        
+        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
+        
+        if(i==1){
+          data.vir <- RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  
+        }else{
+          data.vir <- rbind(data.vir, RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  )
+        }
+      }
+      
+      ## Step4: Test with the virtual data set
+      if(length(S) > 0){
+        pval = binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))
+        pval
+      }
+      else{
+        pval = binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))
+        pval
+      }
+    },
+    error=function(cond) {
+      message(cond)
+      # Choose a return value in case of error
+      return(binCItest.td(x,y,S,suffStat))
+    })
+  
+}  
+
+binCItest.drw <- function(x, y, S, suffStat){
+  if(!cond.PermC(x, y, S, suffStat)){return(binCItest.td(x,y,S,suffStat))}
+  weights_ = compute_weights(x, y, S, suffStat)
+  test_ind = c(x,y,S)
+  del_res = test_wise_deletion_w(test_ind,suffStat$data, weights_)
+  
+  data = del_res$data
+  weights = del_res$weights
+  if(length(S)>0){
+    pval = binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
+    pval
+    
+  }
+  else{
+    pval = binCItest_w(1, 2, c(), weights, list(dm = data[,test_ind], adaptDF = FALSE))
+    pval
+  }
+}
 
 gaussCItest.td.ref <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
@@ -81,30 +199,6 @@ gaussCItest.permc <- function(x, y, S, suffStat){
   }
 }
 
-binCItest.td.ref<- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  sample_size <<- c(sample_size,length(data[,1]))
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
-}
-
-binCItest.td <- function(x, y, S, suffStat){
-  test_ind = c(x,y,S)
-  data = test_wise_deletion(test_ind,suffStat$data)
-  if(length(S)>0){
-    binCItest(1, 2, 3:length(test_ind), list(dm = data[,test_ind], adaptDF = FALSE))  
-  }
-  else{
-    binCItest(1, 2, c(), list(dm = data[,test_ind], adaptDF = FALSE))
-  }
-  
-}
-
 gaussCItest.drw <- function(x, y, S, suffStat) {
   ## Conditional independence test between continuous variables with deletion methods
   ## test P(x,y|S)
@@ -136,102 +230,6 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   suffStat$n = length(weights)
   gaussCItest(x, y, S,suffStat)
 }
-
-binCItest.permc<- function(x, y, S, suffStat){  
-  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
-  tryCatch(
-    {
-      ind_test <- c(x, y, S)
-      ind_W <- get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
-      ind_W <- setdiff(ind_W,ind_test)
-      if(length(ind_W)==0){return(binCItest_td(x,y,S,suffStat))}
-      ind_permc <- c(ind_test, ind_W)  
-      
-      ## Step 1: Get CPD given W = 0 and W = 1 
-      data <- test_wise_deletion(ind_permc, suffStat$data)
-      data <- data[,ind_permc] # Data are used for estimating Conditional Probability Distribution (CPD)
-      num.td <- length(data[,1])
-      num.W <- length(ind_W)
-      comb.W <- bincombinations(length(ind_W))
-      
-      dm <- dim(comb.W)
-      n.comb.W <- dm[1]
-      
-      p.joint.w <- list()
-      for(i in 1:n.comb.W){
-        ind.mask <- comb.W[i, ] == data[,(length(ind_test)+1):length(ind_permc)]
-        ind.mask <- matrix(data = ind.mask, nrow = length(data[,1]))
-        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
-        dat.wi <- data[ind_wi, 1:length(ind_test)]
-        p.xy.wi <- apply(dat.wi,2, function(x) sum(x)/length(x))
-        cor.xy.wi <- cor(dat.wi)
-        p.joint.w[[i]] <- ObtainMultBinaryDist(corr = cor.xy.wi, marg.probs = p.xy.wi )
-      }
-      
-      ## Step 2: Shuffle W 
-      data.W <- test_wise_deletion(ind_W, suffStat$data)
-      nrow.td.W <- length(data.W[,1])
-      data.W <- data.W[,ind_W]
-      if(length(ind_W)==1){
-        data.W <- matrix(data = data.W, nrow = nrow.td.W,byrow = TRUE)  
-      }
-      
-      ind <- 1:nrow.td.W
-      ind.perm.w <- sample(ind)[1:num.td]
-      data.W.perm <- data.W[ind.perm.w,]
-      if(length(ind_W)==1){data.W.perm <- matrix(data = data.W.perm, nrow = num.td,byrow = TRUE)}
-      
-      ## Step 3: Generate virtual data of x,y, and S
-      for(i in 1:n.comb.W){
-        ind.mask <- comb.W[i, ] == data.W.perm
-        if(length(ind_W)==1){ind.mask <- matrix(data = ind.mask, nrow = length(data.W.perm[,1]),byrow = TRUE)}
-        
-        ind_wi <- apply(ind.mask, 1, function(x) sum(x)==num.W)  # every element is the same with W pattern
-        
-        if(i==1){
-          data.vir <- RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  
-        }else{
-          data.vir <- rbind(data.vir, RMultBinary(n = sum(ind_wi), mult.bin.dist = p.joint.w[[i]])$binary.sequences  )
-        }
-      }
-      
-      ## Step4: Test with the virtual data set
-      if(length(S) > 0){
-        pval = binCItest(1,2,c(3:length(ind_test)), list(dm = data.vir, adaptDF = TRUE))
-        pval
-      }
-      else{
-        pval = binCItest(1,2,c(), list(dm = data.vir , adaptDF = TRUE))
-        pval
-      }
-    },
-    error=function(cond) {
-      message(cond)
-      # Choose a return value in case of error
-      return(binCItest_td(x,y,S,suffStat))
-    })
-  
-}  
-
-binCItest.drw <- function(x, y, S, suffStat){
-  if(!cond.PermC(x, y, S, suffStat)){return(binCItest_td(x,y,S,suffStat))}
-  weights_ = compute_weights(x, y, S, suffStat)
-  test_ind = c(x,y,S)
-  del_res = test_wise_deletion_w(test_ind,suffStat$data, weights_)
-  
-  data = del_res$data
-  weights = del_res$weights
-  if(length(S)>0){
-    pval = binCItest_w(1, 2, 3:length(test_ind), weights,list(dm = data[,test_ind], adaptDF = FALSE))
-    pval
-    
-  }
-  else{
-    pval = binCItest_w(1, 2, c(), weights, list(dm = data[,test_ind], adaptDF = FALSE))
-    pval
-  }
-}
-
 
 #****************** Util for the CI tests ****************** 
 
