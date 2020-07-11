@@ -11,7 +11,7 @@ source(paste(src_path,'/SyntheticDataGeneration.R',sep=""))
 
 # Synthethic data generation
 num_var=20
-num_sample = 100000
+num_sample = 10000
 gen_result_list<-gen_data(num_sample = num_sample, 
                           mode = "mnar",
                           num_var=num_var, 

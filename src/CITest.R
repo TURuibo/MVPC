@@ -153,7 +153,7 @@ gaussCItest.td <- function(x, y, S, suffStat) {
 gaussCItest.permc <- function(x, y, S, suffStat){
   ## The Z <- XY; Rz <- XY is not included in the test 
   ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest.td(x,y,S,suffStat))}
   ind_W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
   ind_permc <- c(x, y, S, ind_W)
   ind_test <- c(x, y, S)
@@ -207,10 +207,10 @@ gaussCItest.drw <- function(x, y, S, suffStat) {
   ##--------------
   ## Return: the p-value of the test 
   # Note that "tw_data" and "weights" should have the same order/index
-  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest_td(x,y,S,suffStat))}
+  if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest.td(x,y,S,suffStat))}
   
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
-  if(length(ind_W)==0){return(gaussCItest_td(x,y,S,suffStat))}
+  if(length(ind_W)==0){return(gaussCItest.td(x,y,S,suffStat))}
   
   pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
   candi_W <- setdiff(pa_W, ind_W)
