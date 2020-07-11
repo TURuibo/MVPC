@@ -61,9 +61,8 @@ for(i_g in 1:10){
     res_mvpc_permc<-mvpc(suffStat, binCItest.td, binCItest.permc, alpha=0.05, p=20)
     ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
-    # res_mvpc_drw<-mvpc(suffStat, binCItest.td, binCItest.drw, alpha=0.05, p=20)
-    res_mvpc_drw <- mvpc(suffStat, binCItest.td, binCItest.permc, prt_m, alpha=0.05, p=20)
-    
+    res_mvpc_drw<-mvpc(suffStat, binCItest.td, binCItest.drw, alpha=0.05, p=20)
+
     ## ********* Complete data evaluation *********
     suffStat = list(data=data,adaptDF=FALSE)
     res_pc<-pc(suffStat, binCItest.td, alpha=0.05, p=20)
