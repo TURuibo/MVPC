@@ -18,9 +18,7 @@ The directory structure is:
 	* SyntheticDataGeneration.R: Generation of sythetic data.  
 	* Evaluation.R: Evaluation metrics, such as Structural Hamming distance, recall and precision of the causal skeleton results.  
 * exps: The experiments on the binary and continuous variable datasets.  
-	* bins: Binary experiments.    
-		* bin_NoS_mar.R: the experiments with different sample sizes in MAR datasets.  
-		* bin_NoS_mnar.R: the experiments with different sample sizes in MNAR datasets.  	
+	* bins: Binary variable experiments with different sample sizes in MAR/MNAR datasets.  
 	* conti: Linear Gaussain experiments.  
 		* Mul_cause.R: Experiments for the case with multiple parents of missingness indicators.  
 		* NoS_mar.R: Experiments with different sample sizes in MAR datasets.  

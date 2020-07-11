@@ -25,25 +25,30 @@ rp_pc = list()
 rp_td_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
-nrep = 2
-for(i_g in 1:10){
+
+nrep = 2  # Number of iterations
+n_sample = 10000  # Number of samples
+
+for(i_g in 1:5){
   print(paste('graph=', i_g))
   data.name = paste('data',i_g,sep='')
   graph.name = paste('graph',i_g,sep='')
-  
   data.file <- paste(data_path,'/',data.name,'.txt',sep="")
   graph.file<- paste(data_path,'/',graph.name,'.txt',sep="")
   
   data = load_bin_data(data.file)
-  data = data[1:10000,]
+  data = data[1:n_sample,]
   DAG = load_bin_graph(graph.file)
   CPDAG = dag2cpdag(DAG)
   
   for(i_exp in 1:nrep){
     print(paste('rep=', i_exp))
+    
     # Detect colliders and  Colliders' parents
     cldr <- detect_colliders(DAG)
     cldr_prt <- detect_colliders_prt(DAG, cldr)
+    
+    # Generate datasets with missing values
     bindata = gen.bin.data(data, DAG,
                            mode = 'mnar',
                            num_var=20,
@@ -51,6 +56,7 @@ for(i_g in 1:10){
                            num_m = 10)
     data_m= bindata$data
     prt_m=bindata$prt_m
+    
     ## ********* Correction *********
     suffStat = list(data=data_m,adaptDF=FALSE)
     res_mvpc_permc<-mvpc(suffStat, binCItest.td, binCItest.permc, prt_m, alpha=0.05, p=20)
