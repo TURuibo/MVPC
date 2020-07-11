@@ -26,10 +26,10 @@ rp_td_pc = list()
 
 ## ********* Synthethic Binary Data Generation ********* 
 
-nrep = 2  # Number of iterations
-n_sample = 10000  # Number of samples
+nrep = 1  # Number of iterations
+n_sample = 100000  # Number of samples
 
-for(i_g in 1:5){
+for(i_g in 1:10){
   print(paste('graph=', i_g))
   data.name = paste('data',i_g,sep='')
   graph.name = paste('graph',i_g,sep='')
@@ -56,19 +56,18 @@ for(i_g in 1:5){
                            num_m = 10)
     data_m= bindata$data
     prt_m=bindata$prt_m
+    ## ********* Correction *********
+    suffStat = list(data=data_m,adaptDF=FALSE)
+    res_mvpc_permc<-mvpc(suffStat, binCItest.td, binCItest.permc, alpha=0.05, p=20)
+    ## ********* Correction *********
+    suffStat = list(data=data_m,adaptDF=FALSE)
+    # res_mvpc_drw<-mvpc(suffStat, binCItest.td, binCItest.drw, alpha=0.05, p=20)
+    res_mvpc_drw <- mvpc(suffStat, binCItest.td, binCItest.permc, prt_m, alpha=0.05, p=20)
     
-    ## ********* Correction *********
-    suffStat = list(data=data_m,adaptDF=FALSE)
-    res_mvpc_permc<-mvpc(suffStat, binCItest.td, binCItest.permc, prt_m, alpha=0.05, p=20)
-
-    ## ********* Correction *********
-    suffStat = list(data=data_m,adaptDF=FALSE)
-    res_mvpc_drw<-mvpc(suffStat, binCItest.td, binCItest.drw, prt_m, alpha=0.05, p=20)
-
     ## ********* Complete data evaluation *********
     suffStat = list(data=data,adaptDF=FALSE)
     res_pc<-pc(suffStat, binCItest.td, alpha=0.05, p=20)
-
+    
     ## ********* Test-Wise Deletion *********
     sample_size <<- c()
     suffStat = list(data=data_m,adaptDF=FALSE)

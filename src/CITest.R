@@ -277,9 +277,22 @@ weights_check_table<-function(rw,suffStat,indW, comb.W){
     for(count in 1:length(rw$r)){
       ri = rw$r[count]
       wi =rw$w[[count]]
-      pos_wi = (wi == indW) %*% 1:length(indW)
-      val_wi = comb.W[i, pos_wi]
-      weighti = weighti / f_weights(ri, wi, val_wi, suffStat)
+      posi_boolean_ind = -1 == indW  # Initialize with False list and use OR to get position 
+      pos_wi =c()  # Extention here, the position can be multiple
+      if(length(wi)>1){
+        for(wij in wi){
+          posi_boolean_ind =(wij == indW)  # make sure "pos_wi" follow the order of wi
+          pos_index = 1:length(indW)
+          pos_wi=c(pos_wi, pos_index[posi_boolean_ind])
+        }
+      }else{
+        posi_boolean_ind = (wi == indW) 
+        pos_index = 1:length(indW)
+        pos_wi= c(pos_wi, pos_index[posi_boolean_ind])
+      }
+      
+      val_wi = comb.W[i, pos_wi]  # Get multiple values following the order of wi
+      weighti = weighti / f_weights(ri, wi, val_wi, suffStat) 
     }
     weights_tab = c(weights_tab, weighti)
   }
@@ -295,7 +308,8 @@ compute_weights<- function(x, y, S, suffStat){
   ind_test <- c(x, y, S)
   ind_W <- unique(get_prt_m_xys(c(x,y,S), suffStat))  # Get parents the {xyS} missingness indicators
   if(length(ind_W)==0){return(weights)}
-  
+
+  # Detection parents of the missingness parents
   pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
   candi_W <- setdiff(pa_W, ind_W)
   
