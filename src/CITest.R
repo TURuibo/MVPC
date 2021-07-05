@@ -907,7 +907,8 @@ get_ind_weights <- function(ind_r_xys,  suffStat){
 
 get_prt_i<- function(ind_ri, suffStat){
   prt_cell <- suffStat$prt_m['prt'][suffStat$prt_m['m'] == ind_ri]
-  prt_cell[[1]]
+  if (length(prt_cell) == 0){prt_cell}
+  else{prt_cell[[1]]}
 }
 
 get_logidata <- function(ind_ri,  suffStat){
