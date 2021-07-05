@@ -980,6 +980,9 @@ test_wise_deletion_w <-function(var_ind, data,weights){
 }
 
 get_prt_m_xys<-function(ind, suffStat){
+  # suffStat$prt_m contains all the missingness indictors with at least one parent
+  # intersect the missingness indicators in suffStat$prt_m and the ones in ind
+  # return the parents of the missingness indictors in the intersection
   w = c()
   for(i in ind){
     if(is.in_prt_m(i, suffStat$prt_m)){

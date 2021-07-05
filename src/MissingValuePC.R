@@ -103,7 +103,7 @@ mvpc<-function(suffStat, indepTest,corrMethod,alpha,p,
 detection_prt_m <- function(data, indepTest, alpha, p, fixedGaps = NULL){
   ## Return: the missingness indicator and their parents as a dataframe prt_m for mvpc
   #   prt_m: a data.frame, which saves the missingness indicators in prt_m$m and their parent in prt_m$prt.
-  #     prt_m$m: a list of the missingness indicators.
+  #     prt_m$m: a list of the missingness indicators which have at least a parent.
   #     prt_m$prt: a collection (list) of lists which are the parents of corresponding missingness indicators
   
   R<-get_m_ind(data)
@@ -114,7 +114,7 @@ detection_prt_m <- function(data, indepTest, alpha, p, fixedGaps = NULL){
   count=1
   for(R_ind in R){
     prt_R_ind<- get_prt_R_ind(suffStat, indepTest, alpha, p, R_ind, fixedGaps=fixedGaps)
-    if(length(prt_R_ind)!=0){
+    if(length(prt_R_ind)!=0){  # If the missingness indicator has no parent, then it will not be collected in prt_m
       m[count] <- R_ind
       prt[[count]]<- prt_R_ind
       count = count + 1 
