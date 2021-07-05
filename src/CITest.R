@@ -154,7 +154,24 @@ gaussCItest.permc <- function(x, y, S, suffStat){
   ## The Z <- XY; Rz <- XY is not included in the test 
   ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
   if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest.td(x,y,S,suffStat))}
-  ind_W = get_prt_m_xys(c(x,y,S), suffStat)  # Get parents the {xyS} missingness indicators: prt_m
+  
+  # Get parents the {xyS} missingness indicators: prt_m
+  ind_W = get_prt_m_xys(c(x,y,S), suffStat)  
+  
+  # Get the parents of W missingness indicators
+  if(length(ind_W)==0){return(gaussCItest.td(x,y,S,suffStat))}
+  
+  pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+  candi_W <- setdiff(pa_W, ind_W)
+  
+  while(length(candi_W) > 0  ){
+    ind_W <- c(ind_W, candi_W) # Get parents the W missingness indicators
+    pa_W <- unique(get_prt_m_xys(ind_W, suffStat))
+    candi_W <- setdiff(pa_W, ind_W)
+  } 
+  ind_W <- unique(ind_W)
+  # END
+  
   ind_permc <- c(x, y, S, ind_W)
   ind_test <- c(x, y, S)
   data <- test_wise_deletion(ind_permc, suffStat$data)
