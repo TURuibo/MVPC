@@ -153,9 +153,10 @@ gaussCItest.td <- function(x, y, S, suffStat) {
 gaussCItest.permc <- function(x, y, S, suffStat){
   ## The Z <- XY; Rz <- XY is not included in the test 
   ## Step 1: Learning generaive model for {X, Y, S} to impute X, Y, and S
+  # Check whether there is a variable of which missingness indicator has at least a parent.
   if(!cond.PermC(x, y, S, suffStat)){return(gaussCItest.td(x,y,S,suffStat))}
   
-  # Get parents the {xyS} missingness indicators: prt_m
+  # Get parents the {xyS} missingness indicators with parents: prt_m
   ind_W = get_prt_m_xys(c(x,y,S), suffStat)  
   
   # Get the parents of W missingness indicators
@@ -930,6 +931,7 @@ get_ind_r_xys <- function(ind, suffStat){
 }
 
 test_wise_deletion <-function(var_ind, data){
+  ## Detect the variables with missing values and 
   ## Delete the rows of given variables (var_ind) if there is a missing value in a row
   ## var_ind: variables in the current conditonal independence test
   ## data: the whole data set 
@@ -1010,7 +1012,7 @@ cond.PermC<-function(x, y, S, suffStat){
   ind <- c(x,y,S)
   cond <- FALSE
   if("skel" %in% names(suffStat)){
-    if(length(intersect(ind, suffStat$prt_m$m)) > 0){  # 1) xyS have missingness indicator 
+    if(length(intersect(ind, suffStat$prt_m$m)) > 0){  # 1) xyS have missingness indicators with parents
       if(common.neighbor(x,y,suffStat$skel)){  # 2) x and y have common child
         cond <- TRUE
       }
