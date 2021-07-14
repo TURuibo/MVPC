@@ -846,6 +846,12 @@ compute.weights.continuous<-function(corr_ind, suffStat, kernel.method = kde.wei
     ind_pa = get_prt_i(ind_ri,suffStat)
     # ind_pa =get_prt_m_xys(c(ind_ri), suffStat) 
     # Return the single parent of a missingness indicator (an element, i.e., list[[i]], not a list, i.e., list[i])
+    
+    #######
+    if (length(ind_pa)==0) {next}
+    if (length(ind_pa)>1) {next}
+    #######
+    
     pa = suffStat$data[,ind_pa]
     beta = kernel.method(pa[ind.twdel], pa[!is.na(pa)])
     weights = weights * beta
